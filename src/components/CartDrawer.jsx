@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 
 export default function CartDrawer({ isOpen, onClose, cart, onUpdateQuantity, onRemoveFromCart, onProceedToCheckout }) {
   if (!isOpen) return null;
@@ -14,8 +14,10 @@ export default function CartDrawer({ isOpen, onClose, cart, onUpdateQuantity, on
           <div>
             <div className="flex justify-between items-center pb-4 border-b border-gray-100">
               <h2 className="text-lg font-bold text-gray-900">Your Bag ({totalCount})</h2>
-              <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg">
-                ✕
+              <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded-lg">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
             </div>
 
@@ -24,17 +26,20 @@ export default function CartDrawer({ isOpen, onClose, cart, onUpdateQuantity, on
                 <div className="py-12 text-center text-gray-400 text-xs">Your bag is empty.</div>
               ) : (
                 cart.map((item) => {
-                  const itemImg = item.images && item.images.length > 0 ? item.images[0] : item.image;
+                  const itemImg = (item.images && item.images.length > 0) ? item.images[0] : item.image;
                   return (
                     <div key={item.id} className="py-3 flex items-center justify-between gap-3 group">
                       <img 
                         src={itemImg} 
-                        alt={item.name} 
+                        alt={item.name}
+                        onError={(e) => {
+                          e.currentTarget.src = "https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=600&q=80";
+                        }}
                         className="w-12 h-12 object-contain bg-[#fbfbfa] border border-gray-100 rounded-lg p-1 shrink-0" 
                       />
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-bold text-gray-800 truncate">{item.name}</p>
-                        <p className="text-xs text-gray-500 font-semibold mt-0.5">₹{item.price}</p>
+                        <p className="text-xs text-gray-500 font-semibold mt-0.5">&#8377;{item.price}</p>
                       </div>
 
                       <div className="flex items-center gap-2">
@@ -69,16 +74,16 @@ export default function CartDrawer({ isOpen, onClose, cart, onUpdateQuantity, on
             <div className="pt-4 border-t border-gray-100 space-y-3">
               <div className="flex justify-between text-sm font-bold text-gray-900">
                 <span>Products Subtotal</span>
-                <span>₹{cartTotal}</span>
+                <span>&#8377;{cartTotal}</span>
               </div>
               <p className="text-[11px] text-gray-500">
-                *Tricity bike dispatch calculated at actual distance fare / Postal weight for courier. Free over ₹799.
+                *Tricity bike dispatch calculated at actual distance fare / Postal weight for courier. Free over &#8377;799.
               </p>
               <button
                 onClick={onProceedToCheckout}
                 className="w-full bg-[#071610] hover:bg-[#2c5240] text-white py-3 rounded-xl text-xs font-bold transition-all shadow-md"
               >
-                Proceed to Order (₹{cartTotal})
+                Proceed to Order (&#8377;{cartTotal})
               </button>
             </div>
           )}

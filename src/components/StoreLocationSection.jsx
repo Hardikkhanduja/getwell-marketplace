@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 
 export default function StoreLocationSection({ mapsUrl }) {
   return (
@@ -19,7 +19,12 @@ export default function StoreLocationSection({ mapsUrl }) {
 
           <div className="mt-6 space-y-3">
             <div className="flex items-start gap-3">
-              <div className="p-2 rounded-lg bg-[#faf9f5] border border-gray-200 text-gray-700">📍</div>
+              <div className="p-2 rounded-lg bg-[#faf9f5] border border-gray-200 text-gray-700 shrink-0">
+                <svg className="w-4 h-4 text-emerald-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </div>
               <div>
                 <p className="text-xs font-bold text-gray-900">Address</p>
                 <p className="text-xs text-gray-600">Booth No. 13, Sub. City Center, 35C, Sector 35, Chandigarh, 160022</p>
@@ -27,15 +32,23 @@ export default function StoreLocationSection({ mapsUrl }) {
             </div>
 
             <div className="flex items-start gap-3">
-              <div className="p-2 rounded-lg bg-[#faf9f5] border border-gray-200 text-gray-700">🕒</div>
+              <div className="p-2 rounded-lg bg-[#faf9f5] border border-gray-200 text-gray-700 shrink-0">
+                <svg className="w-4 h-4 text-emerald-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
               <div>
                 <p className="text-xs font-bold text-gray-900">Store Timings</p>
-                <p className="text-xs text-gray-600">Monday – Sunday: 9:00 AM – 09:00 PM (All 7 Days)</p>
+                <p className="text-xs text-gray-600">Monday &ndash; Sunday: 9:00 AM &ndash; 09:00 PM (All 7 Days)</p>
               </div>
             </div>
 
             <div className="flex items-start gap-3">
-              <div className="p-2 rounded-lg bg-[#faf9f5] border border-gray-200 text-gray-700">📞</div>
+              <div className="p-2 rounded-lg bg-[#faf9f5] border border-gray-200 text-gray-700 shrink-0">
+                <svg className="w-4 h-4 text-emerald-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                </svg>
+              </div>
               <div>
                 <p className="text-xs font-bold text-gray-900">Direct Helpline</p>
                 <a href="tel:+919872633001" className="text-xs text-[#2c5240] font-semibold underline">
@@ -59,7 +72,7 @@ export default function StoreLocationSection({ mapsUrl }) {
             </a>
 
             <a
-              href="https://wa.me/919872633001?text=Hi%20Getwell%20Medicos,%20I%20have%20an%20inquiry%20regarding%20a%20product"
+              href="https://wa.me/919872633001?text=Hi%20Getwell%20Medicos,%20I%20have%20an%20inquiry%20regarding%20a%20product."
               target="_blank"
               rel="noopener noreferrer"
               className="bg-[#e9f7ef] hover:bg-[#d4edd9] text-[#1e6f42] border border-[#b2ddbe] text-xs font-semibold px-5 py-3 rounded-xl flex items-center gap-2 transition-all"

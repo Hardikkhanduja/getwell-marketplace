@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import PolicyModal from './PolicyModal';
 
-export default function Footer({ mapsUrl }) {
+export default function Footer({ mapsUrl, onOpenAdmin }) {
   const [activePolicy, setActivePolicy] = useState(null);
 
   return (
@@ -28,23 +28,27 @@ export default function Footer({ mapsUrl }) {
               <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="hover:text-white underline">
                 Google Maps Location
               </a>
-              <span>•</span>
+              <span>&bull;</span>
               <a href="tel:+919872633001" className="hover:text-white">
                 +91 9872633001
               </a>
+              <span>&bull;</span>
+              <button onClick={onOpenAdmin} className="text-emerald-400 hover:text-white underline">
+                Store Admin
+              </button>
             </div>
           </div>
 
           {/* Mandatory Razorpay Compliance Policy Links */}
           <div className="pt-6 border-t border-[#1a382b] flex flex-wrap justify-between items-center gap-4 text-[11px] text-gray-400">
             <div className="flex flex-wrap items-center gap-4">
-              <button onClick={() => setActivePolicy('terms')} className="hover:text-white underline">Terms & Conditions</button>
+              <button onClick={() => setActivePolicy('terms')} className="hover:text-white underline">Terms &amp; Conditions</button>
               <button onClick={() => setActivePolicy('privacy')} className="hover:text-white underline">Privacy Policy</button>
-              <button onClick={() => setActivePolicy('shipping')} className="hover:text-white underline">Shipping & Delivery</button>
-              <button onClick={() => setActivePolicy('refunds')} className="hover:text-white underline">Refund & Cancellation</button>
+              <button onClick={() => setActivePolicy('shipping')} className="hover:text-white underline">Shipping &amp; Delivery</button>
+              <button onClick={() => setActivePolicy('refunds')} className="hover:text-white underline">Refund &amp; Cancellation</button>
               <button onClick={() => setActivePolicy('contact')} className="hover:text-white underline">Contact Us</button>
             </div>
-            <p>© {new Date().getFullYear()} Getwell Medicos. All rights reserved.</p>
+            <p>&copy; {new Date().getFullYear()} Getwell Medicos. All rights reserved.</p>
           </div>
         </div>
       </footer>

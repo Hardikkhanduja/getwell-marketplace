@@ -1,106 +1,114 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState } from 'react';
 
 export default function ProductModal({ product, quantity, setQuantity, onClose, onAddToCart, onBuyNow }) {
   if (!product) return null;
 
-  // Normalize image list
-  const imageList = product.images && product.images.length > 0 
-    ? product.images 
+  const imageList = (product.images && product.images.length > 0)
+    ? product.images
     : [product.image];
 
   const [activeImgIndex, setActiveImgIndex] = useState(0);
-  const [isZoomed, setIsZoomed] = useState(false); // Fullscreen HD Lightbox state
-  const [zoomPos, setZoomPos] = useState({ x: 50, y: 50 }); // Hover zoom position
-  const [isHovering, setIsHovering] = useState(false);
-
-  useEffect(() => {
-    setActiveImgIndex(0);
-    setIsZoomed(false);
-  }, [product]);
-
-  const handlePrevImage = (e) => {
-    e.stopPropagation();
-    setActiveImgIndex((prev) => (prev === 0 ? imageList.length - 1 : prev - 1));
-  };
-
-  const handleNextImage = (e) => {
-    e.stopPropagation();
-    setActiveImgIndex((prev) => (prev === imageList.length - 1 ? 0 : prev + 1));
-  };
+  const [isZoomed, setIsZoomed] = useState(false);
+  const [zoomStyle, setZoomStyle] = useState({});
 
   const handleMouseMove = (e) => {
     const { left, top, width, height } = e.currentTarget.getBoundingClientRect();
     const x = ((e.clientX - left) / width) * 100;
     const y = ((e.clientY - top) / height) * 100;
-    setZoomPos({ x, y });
+    setZoomStyle({
+      transformOrigin: `${x}% ${y}%`,
+      transform: 'scale(2.2)',
+    });
   };
+
+  const handleMouseLeave = () => {
+    setZoomStyle({
+      transformOrigin: 'center center',
+      transform: 'scale(1)',
+    });
+  };
+
+  const handleNextImage = (e) => {
+    if (e) e.stopPropagation();
+    setActiveImgIndex((prev) => (prev + 1) % imageList.length);
+  };
+
+  const handlePrevImage = (e) => {
+    if (e) e.stopPropagation();
+    setActiveImgIndex((prev) => (prev - 1 + imageList.length) % imageList.length);
+  };
+
+  const discountPercent = product.originalPrice > product.price
+    ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
+    : 0;
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-        <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 relative shadow-2xl overflow-hidden border border-gray-100 max-h-[92vh] overflow-y-auto">
-          
-          {/* Close Modal Button */}
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-7 relative shadow-2xl overflow-hidden border border-gray-100 max-h-[90vh] overflow-y-auto">
+          {/* Close Button */}
           <button
             onClick={onClose}
             className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-sm font-bold transition-colors z-10"
+            aria-label="Close modal"
           >
-            ✕
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
 
-          {/* Product Header Section */}
-          <div className="flex flex-col sm:flex-row gap-5 items-center">
-            
-            {/* INTERACTIVE ZOOMABLE IMAGE CONTAINER */}
-            <div className="flex flex-col items-center shrink-0 w-full sm:w-48">
-              
-              {/* Main Image Box with Hover Magnifier */}
+          <div className="flex flex-col sm:flex-row gap-6 items-start">
+            {/* Multi-Image Interactive Slider & 2.2x Zoom View */}
+            <div className="w-full sm:w-1/2 flex flex-col items-center">
               <div 
-                onClick={() => setIsZoomed(true)}
-                onMouseEnter={() => setIsHovering(true)}
-                onMouseLeave={() => setIsHovering(false)}
+                className="w-full h-64 sm:h-72 bg-[#fbfbfa] border border-gray-200/80 rounded-2xl overflow-hidden relative group cursor-crosshair flex items-center justify-center p-3"
                 onMouseMove={handleMouseMove}
-                title="Click to view Fullscreen HD"
-                className="w-full h-48 sm:h-52 bg-[#fbfbfa] border border-gray-200 rounded-2xl p-2 flex items-center justify-center relative group cursor-zoom-in overflow-hidden shadow-inner"
+                onMouseLeave={handleMouseLeave}
+                onClick={() => setIsZoomed(true)}
+                title="Hover to magnify | Click for Fullscreen Inspection"
               >
                 <img
                   src={imageList[activeImgIndex]}
-                  alt={`${product.name} view ${activeImgIndex + 1}`}
-                  style={
-                    isHovering
-                      ? {
-                          transformOrigin: `${zoomPos.x}% ${zoomPos.y}%`,
-                          transform: 'scale(2.2)',
-                        }
-                      : { transform: 'scale(1)' }
-                  }
-                  className="max-h-full max-w-full object-contain transition-transform duration-100 ease-out pointer-events-none"
+                  alt={product.name}
+                  onError={(e) => {
+                    e.currentTarget.src = "https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=600&q=80";
+                  }}
+                  style={zoomStyle}
+                  className="max-h-full max-w-full object-contain transition-transform duration-100 pointer-events-none"
                 />
 
-                {/* Tap to Zoom Badge */}
-                {!isHovering && (
-                  <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-sm text-white text-[10px] font-semibold px-2 py-0.5 rounded-md flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
-                    <span>🔍 Tap to Zoom</span>
-                  </div>
-                )}
+                {/* Inspection Hint Pill */}
+                <div className="absolute top-2 right-2 bg-black/65 backdrop-blur-sm text-white text-[10px] font-medium px-2 py-1 rounded-md flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                  <svg className="w-3 h-3 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  <span>2.2x Zoom & HD Lightbox</span>
+                </div>
 
-                {/* Slider Navigation Arrows (if 2+ photos) */}
-                {imageList.length > 1 && !isHovering && (
+                {/* Slider Nav Arrows */}
+                {imageList.length > 1 && (
                   <>
                     <button
                       onClick={handlePrevImage}
-                      className="absolute left-1.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-white/90 shadow-md border border-gray-200 text-gray-700 hover:bg-white flex items-center justify-center text-xs font-bold transition-all"
+                      className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-white/90 hover:bg-white text-gray-800 shadow-md flex items-center justify-center transition-all opacity-80 hover:opacity-100"
+                      aria-label="Previous image"
                     >
-                      ❮
-                    </button>
-                    <button
-                      onClick={handleNextImage}
-                      className="absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-white/90 shadow-md border border-gray-200 text-gray-700 hover:bg-white flex items-center justify-center text-xs font-bold transition-all"
-                    >
-                      ❯
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" />
+                      </svg>
                     </button>
 
-                    <span className="absolute bottom-1.5 right-1.5 bg-black/70 text-white text-[10px] font-semibold px-2 py-0.5 rounded-full">
+                    <button
+                      onClick={handleNextImage}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-white/90 hover:bg-white text-gray-800 shadow-md flex items-center justify-center transition-all opacity-80 hover:opacity-100"
+                      aria-label="Next image"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+
+                    <span className="absolute bottom-2 right-2 bg-black/70 text-white text-[10px] font-semibold px-2 py-0.5 rounded-full">
                       {activeImgIndex + 1} / {imageList.length}
                     </span>
                   </>
@@ -138,14 +146,14 @@ export default function ProductModal({ product, quantity, setQuantity, onClose, 
 
               <div className="mt-2 flex items-center justify-center sm:justify-start gap-2.5">
                 <span className="text-xs text-gray-400 line-through">
-                  ₹{product.originalPrice}
+                  &#8377;{product.originalPrice}
                 </span>
                 <span className="text-xl font-extrabold text-[#071610]">
-                  ₹{product.price}
+                  &#8377;{product.price}
                 </span>
-                {product.originalPrice > product.price && (
+                {discountPercent > 0 && (
                   <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded">
-                    {Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF
+                    {discountPercent}% OFF
                   </span>
                 )}
               </div>
@@ -165,11 +173,15 @@ export default function ProductModal({ product, quantity, setQuantity, onClose, 
           {/* Verified Guarantee */}
           <div className="mt-4 grid grid-cols-2 gap-2 bg-[#faf9f5] border border-gray-200/60 rounded-xl p-3 text-[11px] text-gray-700">
             <div className="flex items-center gap-1.5">
-              <span className="text-emerald-600 font-bold">✓</span>
+              <svg className="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
+              </svg>
               <span>Verified Fresh Batch & Expiry</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="text-emerald-600 font-bold">⚡</span>
+              <svg className="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
               <span>Same-Day Tricity Dispatch</span>
             </div>
           </div>
@@ -212,7 +224,10 @@ export default function ProductModal({ product, quantity, setQuantity, onClose, 
                 onClick={() => onBuyNow(product, quantity)}
                 className="w-full bg-[#071610] hover:bg-[#1a382b] text-white py-3 rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5"
               >
-                <span>⚡ Buy Now</span>
+                <svg className="w-4 h-4 text-amber-300" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" />
+                </svg>
+                <span>Buy Now</span>
               </button>
             </div>
           </div>
@@ -232,8 +247,11 @@ export default function ProductModal({ product, quantity, setQuantity, onClose, 
             <button
               onClick={() => setIsZoomed(false)}
               className="w-9 h-9 rounded-full bg-white/30 hover:bg-white text-white hover:text-black flex items-center justify-center text-base font-bold transition-all"
+              aria-label="Close zoom"
             >
-              ✕
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
+              </svg>
             </button>
           </div>
 
@@ -249,14 +267,20 @@ export default function ProductModal({ product, quantity, setQuantity, onClose, 
                 <button
                   onClick={handlePrevImage}
                   className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/80 hover:bg-white text-black flex items-center justify-center text-sm font-bold shadow-lg transition-all"
+                  aria-label="Previous image"
                 >
-                  ❮
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" />
+                  </svg>
                 </button>
                 <button
                   onClick={handleNextImage}
                   className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/80 hover:bg-white text-black flex items-center justify-center text-sm font-bold shadow-lg transition-all"
+                  aria-label="Next image"
                 >
-                  ❯
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" />
+                  </svg>
                 </button>
               </>
             )}

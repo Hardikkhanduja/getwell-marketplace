@@ -1,6 +1,6 @@
-import React from 'react';
+﻿import React from 'react';
 
-export default function Header({ searchQuery, setSearchQuery, mapsUrl, totalCartCount, onOpenCart }) {
+export default function Header({ searchQuery, setSearchQuery, mapsUrl, totalCartCount, onOpenCart, onOpenPrescription }) {
   return (
     <header className="sticky top-0 z-40 bg-[#faf9f5]/90 backdrop-blur-md border-b border-[#e5e2d9] transition-all">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-4">
@@ -28,7 +28,7 @@ export default function Header({ searchQuery, setSearchQuery, mapsUrl, totalCart
                 Store
               </span>
             </div>
-            <p className="text-[11px] text-gray-500 font-medium">Healthcare & Skincare • Sector 35C</p>
+            <p className="text-[11px] text-gray-500 font-medium">Healthcare &amp; Skincare &bull; Sector 35C</p>
           </div>
         </div>
 
@@ -53,18 +53,29 @@ export default function Header({ searchQuery, setSearchQuery, mapsUrl, totalCart
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-3">
+        {/* Action Buttons: Prescription Order + Locate + Bag */}
+        <div className="flex items-center gap-2.5">
+          {/* Quick Prescription Order Button */}
+          <button
+            onClick={onOpenPrescription}
+            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-emerald-900 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 rounded-xl transition-all shadow-sm"
+          >
+            <svg className="w-4 h-4 text-emerald-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <span className="hidden sm:inline">Order via</span> Prescription
+          </button>
+
           <a
             href={mapsUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="hidden lg:flex items-center gap-2 px-3 py-2 text-xs font-semibold text-[#2c5240] bg-[#eaf2ee] hover:bg-[#dbe9e1] border border-[#c4ded0] rounded-lg transition-all"
+            className="hidden lg:flex items-center gap-2 px-3 py-2 text-xs font-semibold text-[#2c5240] bg-[#eaf2ee] hover:bg-[#dbe9e1] border border-[#c4ded0] rounded-xl transition-all"
           >
             <svg className="w-4 h-4 text-red-500" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
             </svg>
-            <span>Locate Pharmacy</span>
+            <span>Locate</span>
           </a>
 
           <button
