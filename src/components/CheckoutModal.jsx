@@ -1,4 +1,5 @@
 ﻿import React, { useState } from 'react';
+import { supabase } from '../lib/supabase';
 
 export default function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess }) {
   if (!isOpen) return null;
@@ -13,26 +14,58 @@ export default function CheckoutModal({ isOpen, onClose, cartItems, onOrderSucce
   const [placedOrder, setPlacedOrder] = useState(null);
 
   const subtotal = cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
+  const deliveryNote = subtotal >= 799 ? 'FREE (Orders above ₹799)' : 'Calculated at actual distance';
 
-  // Generate WhatsApp dispatch receipt
-  const generateWhatsAppLink = (order) => {
-    const o = order || placedOrder;
-    if (!o) return '#';
-    const itemsList = o.items
-      .map((it, idx) => `${idx + 1}. ${it.name} (Qty: ${it.quantity}) - \u20B9${it.price * it.quantity}`)
-      .join('\n');
+  // Helper: Silently trigger the automated serverless WhatsApp notification
+  const triggerAutoWhatsAppAlert = async (orderData) => {
+    try {
+      await fetch('/api/send-order-alert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order: orderData }),
+      });
+    } catch (err) {
+      console.warn('Background WhatsApp alert failed:', err);
+    }
+  };
 
-    const msg = `*NEW ORDER RECEIVED - GETWELL MEDICOS*\n\n*Order ID:* #${o.orderNumber}\n*Customer Name:* ${o.customerName}\n*Phone:* ${o.phone}\n*Address:* ${o.address}, ${o.city} - ${o.pincode}\n*Payment Mode:* ${o.payMethod}\n\n*Items Ordered:*\n${itemsList}\n\n*Total Payable:* \u20B9${o.total}\n\nPlease confirm dispatch timeframe from Sector 35C counter.`;
+  // Helper: Save order into Supabase
+  const saveOrderToSupabase = async (orderData) => {
+    if (!supabase) return orderData;
 
-    return `https://wa.me/919872633001?text=${encodeURIComponent(msg)}`;
+    try {
+      await supabase
+        .from('orders')
+        .insert([
+          {
+            order_number: String(orderData.orderNumber),
+            customer_name: orderData.customerName,
+            phone: orderData.phone,
+            address: orderData.address,
+            city: orderData.city,
+            pincode: orderData.pincode,
+            payment_method: orderData.payMethod,
+            payment_id: orderData.paymentId || null,
+            items: orderData.items,
+            subtotal: orderData.subtotal,
+            delivery_fare: orderData.deliveryFare,
+            total_amount: orderData.total,
+            status: 'PENDING_DISPATCH'
+          }
+        ]);
+    } catch (err) {
+      console.error('Supabase order insert error:', err);
+    }
+    return orderData;
   };
 
   const handleOnlinePayment = async (orderData) => {
     const razorpayKey = import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_placeholder';
 
     if (!window.Razorpay) {
-      // If Razorpay SDK failed to load from CDN (e.g. adblocker)
-      alert('Razorpay gateway is initializing. Proceeding via instant counter verification.');
+      alert('Razorpay gateway is initializing. Proceeding via direct counter confirmation.');
+      await saveOrderToSupabase(orderData);
+      triggerAutoWhatsAppAlert(orderData);
       setPlacedOrder(orderData);
       onOrderSuccess();
       return;
@@ -45,12 +78,14 @@ export default function CheckoutModal({ isOpen, onClose, cartItems, onOrderSucce
       name: 'Getwell Medicos',
       description: `Order #${orderData.orderNumber}`,
       image: 'https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg',
-      handler: function (response) {
+      handler: async function (response) {
         const completedOrder = {
           ...orderData,
           paymentId: response.razorpay_payment_id,
           payMethod: 'RAZORPAY (Paid Online)'
         };
+        await saveOrderToSupabase(completedOrder);
+        triggerAutoWhatsAppAlert(completedOrder); // Auto sends to both WhatsApp numbers
         setPlacedOrder(completedOrder);
         onOrderSuccess();
       },
@@ -77,12 +112,14 @@ export default function CheckoutModal({ isOpen, onClose, cartItems, onOrderSucce
       rzp.open();
     } catch (err) {
       console.error('Razorpay invocation error:', err);
+      saveOrderToSupabase(orderData);
+      triggerAutoWhatsAppAlert(orderData);
       setPlacedOrder(orderData);
       onOrderSuccess();
     }
   };
 
-  const handleSubmitOrder = (e) => {
+  const handleSubmitOrder = async (e) => {
     e.preventDefault();
     if (!name || !phone || !address) {
       alert('Please fill all required fields');
@@ -98,19 +135,24 @@ export default function CheckoutModal({ isOpen, onClose, cartItems, onOrderSucce
       city,
       pincode,
       payMethod: payMethod === 'COD' ? 'Cash on Delivery (COD)' : 'Razorpay UPI/Card',
+      paymentId: null,
       items: cartItems,
+      subtotal: subtotal,
+      deliveryFare: deliveryNote,
       total: subtotal,
       date: new Date().toISOString()
     };
 
     if (payMethod === 'RAZORPAY') {
-      handleOnlinePayment(orderData);
+      await handleOnlinePayment(orderData);
     } else {
+      await saveOrderToSupabase(orderData);
+      triggerAutoWhatsAppAlert(orderData); // Automatically alerts both of you in the background
       setTimeout(() => {
         setPlacedOrder(orderData);
         setLoading(false);
         onOrderSuccess();
-      }, 500);
+      }, 400);
     }
   };
 
@@ -131,12 +173,12 @@ export default function CheckoutModal({ isOpen, onClose, cartItems, onOrderSucce
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded">
-                Physical Store Dispatch &bull; Sector 35C
+                Physical Store Dispatch • Sector 35C
               </span>
             </div>
             <h2 className="text-xl font-bold text-gray-900">Complete Delivery Details</h2>
             <p className="text-xs text-gray-500 mt-1">
-              Deliveries across Chandigarh, Mohali & Panchkula dispatched same-day via local bike riders.
+              Deliveries across Chandigarh, Mohali &amp; Panchkula dispatched same-day via local bike riders.
             </p>
 
             <form onSubmit={handleSubmitOrder} className="mt-5 space-y-3.5">
@@ -235,7 +277,7 @@ export default function CheckoutModal({ isOpen, onClose, cartItems, onOrderSucce
               <div className="bg-[#faf9f5] border border-gray-200 rounded-xl p-3.5 space-y-1.5 text-xs">
                 <div className="flex justify-between text-gray-600">
                   <span>Items Total ({cartItems.length} products)</span>
-                  <span>&#8377;{subtotal}</span>
+                  <span>₹{subtotal}</span>
                 </div>
                 <div className="flex justify-between text-gray-600">
                   <span>Delivery Fare</span>
@@ -245,33 +287,33 @@ export default function CheckoutModal({ isOpen, onClose, cartItems, onOrderSucce
                 </div>
                 <div className="flex justify-between text-sm font-bold text-gray-900 pt-1.5 border-t border-gray-200">
                   <span>Payable Total</span>
-                  <span>&#8377;{subtotal}</span>
+                  <span>₹{subtotal}</span>
                 </div>
               </div>
 
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-[#071610] hover:bg-[#1a382b] text-white py-3 rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2"
+                className="w-full bg-[#071610] hover:bg-[#1a382b] text-white py-3.5 rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2"
               >
                 {loading ? (
-                  <span>Processing Payment...</span>
+                  <span>Confirming Order...</span>
                 ) : (
-                  <span>Confirm & Place Order (&#8377;{subtotal})</span>
+                  <span>Place Order (₹{subtotal})</span>
                 )}
               </button>
             </form>
           </div>
         ) : (
-          /* Order Placed Success View */
-          <div className="text-center py-4 space-y-4">
-            <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center mx-auto">
+          /* Clean Order Placed Success View (No manual WhatsApp click required) */
+          <div className="text-center py-6 space-y-4">
+            <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center mx-auto shadow-sm">
               <svg className="w-8 h-8 text-emerald-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
               </svg>
             </div>
             <div>
-              <h2 className="text-xl font-bold text-gray-900">Order Received Successfully!</h2>
+              <h2 className="text-xl font-bold text-gray-900">Order Placed Successfully!</h2>
               <p className="text-xs text-gray-500 mt-1">
                 Order ID: <span className="font-bold text-gray-800">#{placedOrder.orderNumber}</span>
               </p>
@@ -279,39 +321,26 @@ export default function CheckoutModal({ isOpen, onClose, cartItems, onOrderSucce
 
             <div className="bg-[#faf9f5] border border-gray-200 rounded-2xl p-4 text-left text-xs space-y-2">
               <p><strong>Customer:</strong> {placedOrder.customerName} ({placedOrder.phone})</p>
-              <p><strong>Deliver to:</strong> {placedOrder.address}</p>
-              <p><strong>Total Amount:</strong> &#8377;{placedOrder.total} ({placedOrder.payMethod})</p>
+              <p><strong>Deliver to:</strong> {placedOrder.address}, {placedOrder.city}</p>
+              <p><strong>Total Amount:</strong> ₹{placedOrder.total} ({placedOrder.payMethod})</p>
               <p className="text-emerald-800 font-semibold pt-1 border-t border-gray-200 flex items-center gap-1.5">
                 <svg className="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
                 </svg>
-                <span>Packaging at Booth 13, Sector 35C Counter</span>
+                <span>Order received at our Sector 35C counter. Packaging now!</span>
               </p>
             </div>
 
-            {/* Official WhatsApp Dispatch Action */}
-            <div className="pt-2 space-y-2">
-              <a
-                href={generateWhatsAppLink()}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full bg-[#25D366] hover:bg-[#20bd5a] text-white py-3 rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2"
-              >
-                <img
-                  src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg"
-                  alt="WhatsApp"
-                  className="w-4 h-4"
-                />
-                <span>Send Order Receipt to WhatsApp Store</span>
-              </a>
+            <p className="text-[11px] text-gray-500">
+              Our pharmacist will reach out to you on WhatsApp/Phone for delivery dispatch confirmation.
+            </p>
 
-              <button
-                onClick={onClose}
-                className="w-full bg-gray-100 hover:bg-gray-200 text-gray-800 py-2.5 rounded-xl text-xs font-bold transition-colors"
-              >
-                Close & Continue Shopping
-              </button>
-            </div>
+            <button
+              onClick={onClose}
+              className="w-full bg-[#071610] hover:bg-[#1a382b] text-white py-3 rounded-xl text-xs font-bold transition-all shadow-md mt-2"
+            >
+              Continue Shopping
+            </button>
           </div>
         )}
       </div>
