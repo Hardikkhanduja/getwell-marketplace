@@ -1,55 +1,64 @@
-﻿import React, { useState, useEffect, useMemo } from 'react';
-import { supabase } from './lib/supabase';
-import mockProducts from './data/mockProducts';
-import AnnouncementBar from './components/AnnouncementBar';
-import Header from './components/Header';
-import Hero from './components/Hero';
-import FilterSidebar from './components/FilterSidebar';
-import ProductCard from './components/ProductCard';
-import ProductModal from './components/ProductModal';
-import CartDrawer from './components/CartDrawer';
-import CheckoutModal from './components/CheckoutModal';
-import StoreLocationSection from './components/StoreLocationSection';
-import ReviewsSection from './components/ReviewsSection';
-import Footer from './components/Footer';
-import FloatingContact from './components/FloatingContact';
-import PrescriptionModal from './components/PrescriptionModal';
-import AdminProductModal from './components/AdminProductModal';
+﻿import React, { useState, useEffect, useMemo } from "react";
+import { supabase } from "./lib/supabase";
+import mockProducts from "./data/mockProducts";
+import AnnouncementBar from "./components/AnnouncementBar";
+import Header from "./components/Header";
+import Hero from "./components/Hero";
+import FilterSidebar from "./components/FilterSidebar";
+import ProductCard from "./components/ProductCard";
+import ProductModal from "./components/ProductModal";
+import CartDrawer from "./components/CartDrawer";
+import CheckoutModal from "./components/CheckoutModal";
+import StoreLocationSection from "./components/StoreLocationSection";
+import ReviewsSection from "./components/ReviewsSection";
+import Footer from "./components/Footer";
+import FloatingContact from "./components/FloatingContact";
+import PrescriptionModal from "./components/PrescriptionModal";
+import AdminOrdersPortal from "./components/AdminOrdersPortal";
 
 // Helper to normalize Supabase row into standard app product object
 function normalizeProduct(p) {
-  const images = Array.isArray(p.images) && p.images.length > 0 
-    ? p.images 
-    : (p.image_url ? [p.image_url] : ["/Cetaphil-Gentle.png"]);
+  const images =
+    Array.isArray(p.images) && p.images.length > 0
+      ? p.images
+      : p.image_url
+        ? [p.image_url]
+        : ["/Cetaphil-Gentle.png"];
 
   return {
     id: p.id,
-    name: p.title || p.name || 'Getwell Product',
-    subtitle: p.subtitle || '',
-    brand: p.brand_name || p.brand || 'Getwell Verified',
-    category: p.concern || p.category || 'Clinical Skincare',
+    name: p.title || p.name || "Getwell Product",
+    subtitle: p.subtitle || "",
+    brand: p.brand_name || p.brand || "Getwell Verified",
+    category: p.concern || p.category || "Clinical Skincare",
     price: Number(p.price) || 0,
-    originalPrice: Number(p.mrp) || Number(p.originalPrice) || Number(p.price) || 0,
-    sizeVolume: p.size_volume || '',
+    originalPrice:
+      Number(p.mrp) || Number(p.originalPrice) || Number(p.price) || 0,
+    sizeVolume: p.size_volume || "",
     rating: Number(p.rating) || 4.9,
     reviewsCount: Number(p.reviews_count) || 120,
     images: images,
     image: images[0],
     benefits: Array.isArray(p.benefits) ? p.benefits : [],
     keyIngredients: Array.isArray(p.key_ingredients) ? p.key_ingredients : [],
-    expiryDate: p.expiry_date || '',
+    expiryDate: p.expiry_date || "",
     inStock: p.in_stock !== false,
     isBestseller: Boolean(p.is_bestseller),
-    description: p.subtitle || (Array.isArray(p.benefits) && p.benefits.length > 0 ? p.benefits.join('. ') : (p.description || 'Authentic clinical product directly sourced from authorized pharmaceutical distributors.'))
+    description:
+      p.subtitle ||
+      (Array.isArray(p.benefits) && p.benefits.length > 0
+        ? p.benefits.join(". ")
+        : p.description ||
+          "Authentic clinical product directly sourced from authorized pharmaceutical distributors."),
   };
 }
 
 export default function App() {
   const [products, setProducts] = useState(mockProducts);
   const [loadingProducts, setLoadingProducts] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  const [selectedBrand, setSelectedBrand] = useState('All');
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("All");
+  const [selectedBrand, setSelectedBrand] = useState("All");
   const [maxPrice, setMaxPrice] = useState(2500);
   const [cart, setCart] = useState([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -59,12 +68,13 @@ export default function App() {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [modalQty, setModalQty] = useState(1);
 
-  const GOOGLE_MAPS_URL = "https://www.google.com/maps?daddr=Booth+No.+13,+Sub.+City+Center,+35C,+Sector+35,+Chandigarh,+160022";
+  const GOOGLE_MAPS_URL =
+    "https://www.google.com/maps?daddr=Booth+No.+13,+Sub.+City+Center,+35C,+Sector+35,+Chandigarh,+160022";
 
   // Check if URL has ?admin=true or ?manage=true on load
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('admin') === 'true' || params.get('manage') === 'true') {
+    if (params.get("admin") === "true" || params.get("manage") === "true") {
       setIsAdminOpen(true);
     }
   }, []);
@@ -79,18 +89,21 @@ export default function App() {
 
       try {
         const { data, error } = await supabase
-          .from('products')
-          .select('*')
-          .order('created_at', { ascending: false });
+          .from("products")
+          .select("*")
+          .order("created_at", { ascending: false });
 
         if (error) {
-          console.warn('Supabase fetch error, falling back to mock catalog:', error);
+          console.warn(
+            "Supabase fetch error, falling back to mock catalog:",
+            error,
+          );
         } else if (data && data.length > 0) {
           const formatted = data.map(normalizeProduct);
           setProducts(formatted);
         }
       } catch (err) {
-        console.error('Error querying Supabase:', err);
+        console.error("Error querying Supabase:", err);
       } finally {
         setLoadingProducts(false);
       }
@@ -102,25 +115,28 @@ export default function App() {
   // Compute dynamic categories and brands from current products
   const categories = useMemo(() => {
     const set = new Set(products.map((p) => p.category).filter(Boolean));
-    return ['All', ...Array.from(set)];
+    return ["All", ...Array.from(set)];
   }, [products]);
 
   const brands = useMemo(() => {
     const set = new Set(products.map((p) => p.brand).filter(Boolean));
-    return ['All', ...Array.from(set)];
+    return ["All", ...Array.from(set)];
   }, [products]);
 
   // Filter logic
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
       const q = searchQuery.trim().toLowerCase();
-      const matchesSearch = !q || 
+      const matchesSearch =
+        !q ||
         product.name.toLowerCase().includes(q) ||
         product.brand.toLowerCase().includes(q) ||
         product.category.toLowerCase().includes(q) ||
         (product.subtitle && product.subtitle.toLowerCase().includes(q));
-      const matchesCategory = selectedCategory === 'All' || product.category === selectedCategory;
-      const matchesBrand = selectedBrand === 'All' || product.brand === selectedBrand;
+      const matchesCategory =
+        selectedCategory === "All" || product.category === selectedCategory;
+      const matchesBrand =
+        selectedBrand === "All" || product.brand === selectedBrand;
       const matchesPrice = product.price <= maxPrice;
       return matchesSearch && matchesCategory && matchesBrand && matchesPrice;
     });
@@ -132,14 +148,24 @@ export default function App() {
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id);
       return existing
-        ? prev.map((item) => item.id === product.id ? { ...item, quantity: item.quantity + quantity } : item)
+        ? prev.map((item) =>
+            item.id === product.id
+              ? { ...item, quantity: item.quantity + quantity }
+              : item,
+          )
         : [...prev, { ...product, quantity }];
     });
     setIsCartOpen(true);
   };
 
   const updateQuantity = (id, delta) => {
-    setCart((prev) => prev.map((item) => item.id === id ? { ...item, quantity: item.quantity + delta } : item).filter((item) => item.quantity > 0));
+    setCart((prev) =>
+      prev
+        .map((item) =>
+          item.id === id ? { ...item, quantity: item.quantity + delta } : item,
+        )
+        .filter((item) => item.quantity > 0),
+    );
   };
 
   const removeFromCart = (id) => {
@@ -173,7 +199,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#faf9f5] text-[#1a2e26] font-sans antialiased selection:bg-[#476556] selection:text-white pb-16">
       <AnnouncementBar mapsUrl={GOOGLE_MAPS_URL} />
-      
+
       <Header
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
@@ -183,8 +209,8 @@ export default function App() {
         onOpenPrescription={() => setIsPrescriptionOpen(true)}
       />
 
-      <Hero 
-        mapsUrl={GOOGLE_MAPS_URL} 
+      <Hero
+        mapsUrl={GOOGLE_MAPS_URL}
         onOpenPrescription={() => setIsPrescriptionOpen(true)}
       />
 
@@ -197,7 +223,9 @@ export default function App() {
               key={cat}
               onClick={() => setSelectedCategory(cat)}
               className={`px-4 py-2 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
-                selectedCategory === cat ? 'bg-[#071610] text-white shadow-sm' : 'bg-white border border-[#d6d2c4] text-gray-700 hover:bg-[#f2efe6]'
+                selectedCategory === cat
+                  ? "bg-[#071610] text-white shadow-sm"
+                  : "bg-white border border-[#d6d2c4] text-gray-700 hover:bg-[#f2efe6]"
               }`}
             >
               {cat}
@@ -217,11 +245,20 @@ export default function App() {
           <section className="lg:col-span-3">
             <div className="flex justify-between items-center mb-4">
               <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                Showing {filteredProducts.length} verified products {loadingProducts && '(Syncing...)'}
+                Showing {filteredProducts.length} verified products{" "}
+                {loadingProducts && "(Syncing...)"}
               </span>
-              {(selectedCategory !== 'All' || selectedBrand !== 'All' || searchQuery || maxPrice < 2500) && (
+              {(selectedCategory !== "All" ||
+                selectedBrand !== "All" ||
+                searchQuery ||
+                maxPrice < 2500) && (
                 <button
-                  onClick={() => { setSelectedCategory('All'); setSelectedBrand('All'); setSearchQuery(''); setMaxPrice(2500); }}
+                  onClick={() => {
+                    setSelectedCategory("All");
+                    setSelectedBrand("All");
+                    setSearchQuery("");
+                    setMaxPrice(2500);
+                  }}
                   className="text-xs text-red-600 hover:underline font-medium"
                 >
                   Reset Filters
@@ -232,8 +269,18 @@ export default function App() {
             {filteredProducts.length === 0 ? (
               <div className="bg-white rounded-3xl border border-[#e5e2d9] p-10 text-center space-y-4">
                 <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-800 flex items-center justify-center mx-auto">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  <svg
+                    className="w-6 h-6"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                    />
                   </svg>
                 </div>
                 <div>
@@ -241,7 +288,8 @@ export default function App() {
                     Couldn't find "{searchQuery}" in our online catalog?
                   </p>
                   <p className="text-xs text-gray-500 max-w-md mx-auto mt-1">
-                    We stock thousands of allopathic medicines &amp; health products at our Sector 35C counter.
+                    We stock thousands of allopathic medicines &amp; health
+                    products at our Sector 35C counter.
                   </p>
                 </div>
                 <button
@@ -249,8 +297,18 @@ export default function App() {
                   className="bg-[#071610] hover:bg-[#1a382b] text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-all shadow-md inline-flex items-center gap-2"
                 >
                   <span>Request "{searchQuery}" on WhatsApp Rx</span>
-                  <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                  <svg
+                    className="w-4 h-4 text-emerald-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M14 5l7 7m0 0l-7 7m7-7H3"
+                    />
                   </svg>
                 </button>
               </div>
@@ -260,7 +318,10 @@ export default function App() {
                   <ProductCard
                     key={product.id}
                     product={product}
-                    onSelect={(p) => { setSelectedProduct(p); setModalQty(1); }}
+                    onSelect={(p) => {
+                      setSelectedProduct(p);
+                      setModalQty(1);
+                    }}
                     onAddToCart={addToCart}
                   />
                 ))}
@@ -272,7 +333,10 @@ export default function App() {
 
       <StoreLocationSection mapsUrl={GOOGLE_MAPS_URL} />
       <ReviewsSection />
-      <Footer mapsUrl={GOOGLE_MAPS_URL} onOpenAdmin={() => setIsAdminOpen(true)} />
+      <Footer
+        mapsUrl={GOOGLE_MAPS_URL}
+        onOpenAdmin={() => setIsAdminOpen(true)}
+      />
 
       {/* Overlays & Modals */}
       <CartDrawer
@@ -281,7 +345,10 @@ export default function App() {
         cart={cart}
         onUpdateQuantity={updateQuantity}
         onRemoveFromCart={removeFromCart}
-        onProceedToCheckout={() => { setIsCartOpen(false); setIsCheckoutOpen(true); }}
+        onProceedToCheckout={() => {
+          setIsCartOpen(false);
+          setIsCheckoutOpen(true);
+        }}
       />
 
       <ProductModal
@@ -289,7 +356,10 @@ export default function App() {
         quantity={modalQty}
         setQuantity={setModalQty}
         onClose={() => setSelectedProduct(null)}
-        onAddToCart={(p, e, q) => { addToCart(p, e, q); setSelectedProduct(null); }}
+        onAddToCart={(p, e, q) => {
+          addToCart(p, e, q);
+          setSelectedProduct(null);
+        }}
         onBuyNow={handleBuyNow}
       />
 
@@ -297,7 +367,10 @@ export default function App() {
         isOpen={isCheckoutOpen}
         onClose={() => setIsCheckoutOpen(false)}
         cartItems={cart}
-        onOrderSuccess={() => { setCart([]); setIsCheckoutOpen(false); }}
+        onOrderSuccess={() => {
+          setCart([]);
+          setIsCheckoutOpen(false);
+        }}
       />
 
       {/* Prescription / Unlisted Medicine Inquiry Modal */}
@@ -307,7 +380,7 @@ export default function App() {
       />
 
       {/* Supabase Product Inventory Admin Modal */}
-      <AdminProductModal
+      <AdminOrdersPortal
         isOpen={isAdminOpen}
         onClose={() => setIsAdminOpen(false)}
         currentProducts={products}
