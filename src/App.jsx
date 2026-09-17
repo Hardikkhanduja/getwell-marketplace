@@ -367,10 +367,7 @@ export default function App() {
         isOpen={isCheckoutOpen}
         onClose={() => setIsCheckoutOpen(false)}
         cartItems={cart}
-        onOrderSuccess={() => {
-          setCart([]);
-          setIsCheckoutOpen(false);
-        }}
+        onClearCart={() => setCart([])}
       />
 
       {/* Prescription / Unlisted Medicine Inquiry Modal */}
