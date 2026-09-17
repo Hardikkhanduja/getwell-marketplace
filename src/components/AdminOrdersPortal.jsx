@@ -2,9 +2,7 @@
 import React, { useState, useEffect } from "react";
 import {
   Lock,
-  Unlock,
   Package,
-  ShoppingBag,
   PlusCircle,
   Truck,
   CheckCircle2,
@@ -16,7 +14,6 @@ import {
   Upload,
   Sparkles,
   AlertCircle,
-  IndianRupee,
   Layers,
   Image as ImageIcon,
   Trash2,
@@ -33,13 +30,13 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
   });
   const [pinError, setPinError] = useState(false);
 
-  // Active Navigation Tab: 'orders' | 'catalog' | 'add_product'
+  // Active Navigation Tab: 'orders' | 'add_product'
   const [activeTab, setActiveTab] = useState("orders");
 
   // Live Orders State
   const [orders, setOrders] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
-  const [orderFilter, setOrderFilter] = useState("All"); // 'All' | 'Received' | 'Packed' | 'Dispatched' | 'Delivered'
+  const [orderFilter, setOrderFilter] = useState("All");
 
   // Product Creator State
   const [newProduct, setNewProduct] = useState({
@@ -192,12 +189,13 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
         uploadedUrls[0] ||
         "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=600";
 
-      // B. Insert into 'products' table
+      // B. Insert into 'products' table (sends both 'name' and 'title' for schema compatibility)
       const { data, error } = await supabase
         .from("products")
         .insert([
           {
             name: newProduct.name.trim(),
+            title: newProduct.name.trim(), // Supports both 'name' and 'title' columns
             brand: newProduct.brand.trim(),
             category: newProduct.category,
             unit: newProduct.unit.trim(),
@@ -269,7 +267,7 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
           <p><b>Address:</b> ${order.delivery_address}</p>
           <div class="line"></div>
           <p class="bold">ITEMS ORDERED:</p>
-          ${(order.items || []).map((i) => `<div class="row"><span>${i.name} x${i.quantity}</span><span>₹${i.price * i.quantity}</span></div>`).join("")}
+          ${(order.items || []).map((i) => `<div class="row"><span>${i.name || i.title} x${i.quantity}</span><span>₹${i.price * i.quantity}</span></div>`).join("")}
           <div class="line"></div>
           <div class="row bold"><span>Total Payable:</span><span>₹${order.total_amount}</span></div>
           <p><b>Payment:</b> ${order.payment_method} (${order.payment_status})</p>
@@ -335,7 +333,7 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
     );
   }
 
-  // Calculate quick metrics
+  // Quick KPI metrics
   const totalRevenue = orders.reduce(
     (sum, o) => sum + (Number(o.total_amount) || 0),
     0,
@@ -344,7 +342,6 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
     (o) => o.order_status === "Received" || o.order_status === "Packed",
   ).length;
 
-  // Filtered Orders
   const filteredOrders = orders.filter(
     (o) => orderFilter === "All" || o.order_status === orderFilter,
   );
@@ -557,7 +554,7 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
                             className="flex justify-between text-slate-300"
                           >
                             <span className="truncate max-w-[180px]">
-                              {item.name}{" "}
+                              {item.name || item.title}{" "}
                               <strong className="text-emerald-400">
                                 x{item.quantity}
                               </strong>
@@ -607,7 +604,7 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
           </div>
         )}
 
-        {/* ================= TAB 2: PRODUCT CREATOR (WITH MULTI-IMAGE & DESCRIPTION) ================= */}
+        {/* ================= TAB 2: PRODUCT CREATOR ================= */}
         {activeTab === "add_product" && (
           <div className="max-w-2xl mx-auto bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 space-y-6">
             <div>
@@ -787,7 +784,7 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
               <div className="space-y-2 pt-1">
                 <label className="text-slate-300 font-semibold flex items-center gap-1.5">
                   <ImageIcon className="w-4 h-4 text-emerald-400" />
-                  Product Photos (Front, Back, Ingredients, Expiry)
+                  Product Photos (Select 1 or Multiple Photos)
                 </label>
 
                 <div className="border-2 border-dashed border-slate-800 hover:border-emerald-500/50 rounded-2xl p-4 text-center bg-slate-950/60 transition">
@@ -829,7 +826,7 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
                         <button
                           type="button"
                           onClick={() => handleRemovePhoto(index)}
-                          className="absolute top-1 right-1 p-1 bg-rose-600/90 text-white rounded-full opacity-90 hover:opacity-100 transition"
+                          className="absolute top-1 right-1 p-1 bg-rose-600/90 text-white rounded-full opacity-90 hover:opacity-100 transition cursor-pointer"
                           title="Remove photo"
                         >
                           <Trash2 className="w-3 h-3" />
