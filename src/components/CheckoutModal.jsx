@@ -1,407 +1,619 @@
-﻿import React, { useState } from 'react';
-import { supabase } from '../lib/supabase';
+﻿// src/components/CheckoutModal.jsx
+import React, { useState, useEffect } from "react";
+import {
+  X,
+  ShieldCheck,
+  Truck,
+  CreditCard,
+  Banknote,
+  MapPin,
+  Phone,
+  User,
+  AlertCircle,
+  CheckCircle2,
+  Sparkles,
+  ArrowRight,
+  ExternalLink,
+} from "lucide-react";
+import confetti from "canvas-confetti";
+import { supabase } from "../lib/supabase";
 
-// Helper: Check if address is in Chandigarh/Tricity
-const isLocalTricity = (pincode, city) => {
-  const cleanPin = (pincode || '').trim();
-  const cleanCity = (city || '').toLowerCase();
-  const isTricityPin = cleanPin.startsWith('160') || cleanPin.startsWith('134') || cleanPin.startsWith('140');
-  const isTricityCity = ['chandigarh', 'mohali', 'panchkula', 'zirakpur', 'kharar'].some((c) => cleanCity.includes(c));
-  return isTricityPin || isTricityCity;
-};
+export default function CheckoutModal({
+  isOpen,
+  onClose,
+  cartItems = [],
+  onClearCart,
+}) {
+  // Form State
+  const [formData, setFormData] = useState({
+    name: "",
+    phone: "",
+    address: "",
+    city: "Chandigarh",
+    pincode: "160022",
+    paymentMethod: "razorpay", // 'razorpay' or 'cod'
+  });
 
-export default function CheckoutModal({ isOpen, onClose, cartItems, onClearCart }) {
-  if (!isOpen) return null;
-
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [address, setAddress] = useState('');
-  const [city, setCity] = useState('Chandigarh');
-  const [pincode, setPincode] = useState('160022');
-  const [payMethod, setPayMethod] = useState('RAZORPAY'); // 'RAZORPAY' or 'COD'
   const [loading, setLoading] = useState(false);
   const [placedOrder, setPlacedOrder] = useState(null);
+  const [errorMsg, setErrorMsg] = useState("");
 
-  const subtotal = cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
-  const isTricity = isLocalTricity(pincode, city);
-  const deliveryNote = subtotal >= 799 
-    ? 'FREE (Orders above ₹799)' 
-    : (isTricity ? 'Local bike rider fare' : 'Standard courier weight fare');
+  // Reset placedOrder when modal opens fresh
+  useEffect(() => {
+    if (isOpen) {
+      setPlacedOrder(null);
+      setErrorMsg("");
+    }
+  }, [isOpen]);
 
-  // Trigger background WhatsApp alert (non-blocking)
-  const triggerAutoWhatsAppAlert = (orderData) => {
+  if (!isOpen) return null;
+
+  // Pricing calculations
+  const subtotal = cartItems.reduce(
+    (sum, item) => sum + (Number(item.price) || 0) * (item.quantity || 1),
+    0,
+  );
+  const isFreeDelivery = subtotal >= 799;
+  const deliveryFare = subtotal === 0 ? 0 : isFreeDelivery ? 0 : 49;
+  const totalAmount = subtotal + deliveryFare;
+
+  // Pincode detection (Tricity vs National)
+  const isTricityPincode = (pin) => {
+    if (!pin) return true;
+    const cleanPin = pin.trim();
+    return (
+      cleanPin.startsWith("160") || // Chandigarh
+      cleanPin.startsWith("134") || // Panchkula / Pinjore
+      cleanPin.startsWith("140") || // Mohali / Zirakpur / Kharar
+      cleanPin.startsWith("141")
+    );
+  };
+  const isLocalDelivery = isTricityPincode(formData.pincode);
+
+  // Trigger celebration confetti
+  const triggerConfetti = () => {
     try {
-      fetch('/api/send-order-alert', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ order: orderData }),
-      }).catch((err) => console.warn('WhatsApp alert fetch failed:', err));
-    } catch (err) {
-      console.warn('Background alert error:', err);
+      confetti({
+        particleCount: 80,
+        spread: 70,
+        origin: { y: 0.6 },
+      });
+    } catch {
+      // safe fallback
     }
   };
 
-  // Save order to Supabase (non-blocking)
-  const saveOrderToSupabase = async (orderData) => {
-    if (!supabase) return;
+  // Dispatch dual WhatsApp alert to Father & Son
+  const sendWhatsAppNotification = async (orderPayload) => {
     try {
-      await supabase.from('orders').insert([
-        {
-          order_number: String(orderData.orderNumber),
-          customer_name: orderData.customerName,
-          phone: orderData.phone,
-          address: orderData.address,
-          city: orderData.city,
-          pincode: orderData.pincode,
-          payment_method: orderData.payMethod,
-          payment_id: orderData.paymentId || null,
-          items: orderData.items,
-          subtotal: orderData.subtotal,
-          delivery_fare: orderData.deliveryFare,
-          total_amount: orderData.total,
-          status: 'PENDING_DISPATCH'
-        }
-      ]);
+      await fetch("/api/send-order-alert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(orderPayload),
+      });
     } catch (err) {
-      console.error('Supabase order insert error:', err);
+      console.warn("WhatsApp alert dispatch background note:", err);
     }
   };
 
-  // Safe Confetti
-  const fireConfetti = () => {
+  // Save Order to Supabase
+  const saveOrderToDatabase = async (orderPayload) => {
     try {
-      if (window.confetti) {
-        window.confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
+      const { data, error } = await supabase
+        .from("orders")
+        .insert([
+          {
+            order_id: orderPayload.orderId,
+            customer_name: orderPayload.customerName,
+            customer_phone: orderPayload.customerPhone,
+            delivery_address: `${orderPayload.address}, ${orderPayload.city} - ${orderPayload.pincode}`,
+            pincode: orderPayload.pincode,
+            city: orderPayload.city,
+            total_amount: orderPayload.totalAmount,
+            payment_method: orderPayload.paymentMethod,
+            payment_status: orderPayload.paymentStatus,
+            order_status: "Received",
+            items: orderPayload.items,
+          },
+        ])
+        .select();
+
+      if (error) {
+        console.warn("Supabase order insert note:", error.message);
       }
-    } catch (e) {}
+      return data;
+    } catch (err) {
+      console.warn("Supabase connection note:", err);
+      return null;
+    }
   };
 
-  const handleOnlinePayment = (orderData) => {
-    const razorpayKey = import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_placeholder';
+  // Handle Razorpay Checkout
+  const handleRazorpayPayment = async (orderId) => {
+    const razorpayKey = import.meta.env.VITE_RAZORPAY_KEY_ID;
 
-    if (!window.Razorpay) {
-      alert('Razorpay gateway is initializing. Proceeding with store counter verification.');
-      saveOrderToSupabase(orderData);
-      triggerAutoWhatsAppAlert(orderData);
-      if (onClearCart) onClearCart();
-      setPlacedOrder(orderData);
+    if (!razorpayKey) {
+      setErrorMsg("Razorpay Key not configured in environment variables.");
       setLoading(false);
       return;
     }
 
     const options = {
       key: razorpayKey,
-      amount: subtotal * 100, // INR in paise
-      currency: 'INR',
-      name: 'Getwell Medicos',
-      description: `Order #${orderData.orderNumber}`,
-      image: 'https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg',
-      handler: function (response) {
-        const completedOrder = {
-          ...orderData,
-          paymentId: response.razorpay_payment_id,
-          payMethod: 'RAZORPAY (Paid Online)'
-        };
-        // 1. Immediately show confirmation screen
-        setPlacedOrder(completedOrder);
-        setLoading(false);
-        fireConfetti();
-        if (onClearCart) onClearCart();
-
-        // 2. Perform background database & WhatsApp sync
-        saveOrderToSupabase(completedOrder);
-        triggerAutoWhatsAppAlert(completedOrder);
-      },
+      amount: totalAmount * 100, // in paise
+      currency: "INR",
+      name: "Getwell Medicos",
+      description: `Order #${orderId} - Pharmacy Dispensing`,
+      image:
+        "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=200",
       prefill: {
-        name: name,
-        contact: phone,
+        name: formData.name,
+        contact: formData.phone,
       },
       theme: {
-        color: '#071610',
+        color: "#059669", // emerald-600
+      },
+      handler: async function (response) {
+        const confirmedOrder = {
+          orderId,
+          customerName: formData.name,
+          customerPhone: formData.phone,
+          address: formData.address,
+          city: formData.city,
+          pincode: formData.pincode,
+          items: cartItems,
+          totalAmount,
+          paymentMethod: "Prepaid (UPI / Card / NetBanking)",
+          paymentStatus: "Paid",
+          razorpayPaymentId: response.razorpay_payment_id,
+          createdAt: new Date().toISOString(),
+          isLocal: isLocalDelivery,
+        };
+
+        // 1. Immediately show confirmation screen
+        setPlacedOrder(confirmedOrder);
+        setLoading(false);
+        triggerConfetti();
+
+        // 2. Non-blocking background save & WhatsApp alert
+        saveOrderToDatabase(confirmedOrder);
+        sendWhatsAppNotification(confirmedOrder);
       },
       modal: {
         ondismiss: function () {
           setLoading(false);
-        }
-      }
+        },
+      },
     };
 
     try {
       const rzp = new window.Razorpay(options);
-      rzp.on('payment.failed', function (resp) {
-        alert('Payment failed: ' + resp.error.description);
+      rzp.on("payment.failed", function (response) {
+        setErrorMsg(`Payment failed: ${response.error.description}`);
         setLoading(false);
       });
       rzp.open();
     } catch (err) {
-      console.error('Razorpay invocation error:', err);
-      saveOrderToSupabase(orderData);
-      triggerAutoWhatsAppAlert(orderData);
-      if (onClearCart) onClearCart();
-      setPlacedOrder(orderData);
+      console.error("Razorpay invocation error:", err);
+      setErrorMsg("Could not open Razorpay checkout window.");
       setLoading(false);
     }
   };
 
-  const handleSubmitOrder = (e) => {
+  // Form Submit Handler
+  const handleSubmitOrder = async (e) => {
     e.preventDefault();
-    if (!name || !phone || !address) {
-      alert('Please fill all required fields');
+    setErrorMsg("");
+
+    if (
+      !formData.name.trim() ||
+      !formData.phone.trim() ||
+      !formData.address.trim()
+    ) {
+      setErrorMsg(
+        "Please fill in your name, phone number, and complete delivery address.",
+      );
+      return;
+    }
+
+    if (formData.phone.trim().replace(/\D/g, "").length < 10) {
+      setErrorMsg("Please enter a valid 10-digit mobile number.");
       return;
     }
 
     setLoading(true);
-    const orderData = {
-      orderNumber: Math.floor(100000 + Math.random() * 900000),
-      customerName: name,
-      phone,
-      address,
-      city,
-      pincode,
-      payMethod: payMethod === 'COD' ? 'Cash on Delivery (COD)' : 'Razorpay UPI/Card',
-      paymentId: null,
-      items: cartItems,
-      subtotal: subtotal,
-      deliveryFare: deliveryNote,
-      total: subtotal,
-      date: new Date().toISOString()
-    };
+    const orderId = "GWM-" + Math.floor(100000 + Math.random() * 900000);
 
-    if (payMethod === 'RAZORPAY') {
-      handleOnlinePayment(orderData);
+    if (formData.paymentMethod === "razorpay") {
+      await handleRazorpayPayment(orderId);
     } else {
-      // 1. Immediately show confirmation screen for COD
-      setPlacedOrder(orderData);
-      setLoading(false);
-      fireConfetti();
-      if (onClearCart) onClearCart();
+      // Cash on Delivery
+      const confirmedOrder = {
+        orderId,
+        customerName: formData.name,
+        customerPhone: formData.phone,
+        address: formData.address,
+        city: formData.city,
+        pincode: formData.pincode,
+        items: cartItems,
+        totalAmount,
+        paymentMethod: "Cash on Delivery (COD)",
+        paymentStatus: "Pending (Pay on Arrival)",
+        createdAt: new Date().toISOString(),
+        isLocal: isLocalDelivery,
+      };
 
-      // 2. Background database & WhatsApp dispatch
-      saveOrderToSupabase(orderData);
-      triggerAutoWhatsAppAlert(orderData);
+      // 1. Immediately show confirmation screen
+      setPlacedOrder(confirmedOrder);
+      setLoading(false);
+      triggerConfetti();
+
+      // 2. Background database save & WhatsApp dispatch
+      saveOrderToDatabase(confirmedOrder);
+      sendWhatsAppNotification(confirmedOrder);
     }
   };
 
-  const handleModalClose = () => {
-    setPlacedOrder(null);
-    onClose();
-  };
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 relative shadow-2xl overflow-hidden border border-gray-100 max-h-[90vh] overflow-y-auto">
-        <button
-          onClick={handleModalClose}
-          className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-sm font-bold transition-colors z-10"
-          aria-label="Close checkout"
-        >
-          ✕
-        </button>
-
-        {!placedOrder ? (
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded">
-                Physical Store Dispatch • Sector 35C
-              </span>
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 animate-fadeIn">
+      {/* Modal Container */}
+      <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh] relative">
+        {/* ================= FIXED STICKY HEADER (ALWAYS VISIBLE WITH CLOSE BUTTON) ================= */}
+        <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-md px-6 py-4 border-b border-slate-200 flex items-center justify-between shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
+              {placedOrder ? (
+                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+              ) : (
+                <ShieldCheck className="w-5 h-5" />
+              )}
             </div>
-            <h2 className="text-xl font-bold text-gray-900">Complete Delivery Details</h2>
-            <p className="text-xs text-gray-500 mt-1">
-              Deliveries across Chandigarh, Mohali &amp; Panchkula dispatched same-day via local bike riders.
-            </p>
+            <div>
+              <h3 className="font-bold text-base text-slate-900 leading-tight">
+                {placedOrder ? "Order Confirmed!" : "Complete Delivery Details"}
+              </h3>
+              <p className="text-xs text-slate-500">
+                {placedOrder
+                  ? `Order ID: #${placedOrder.orderId}`
+                  : "Dispatched from Booth 13, Sec 35C"}
+              </p>
+            </div>
+          </div>
 
-            <form onSubmit={handleSubmitOrder} className="mt-5 space-y-3.5">
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Full Name *</label>
+          {/* Permanently Visible Close Button */}
+          <button
+            type="button"
+            onClick={() => {
+              if (placedOrder && onClearCart) {
+                onClearCart();
+              }
+              onClose();
+            }}
+            className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+            aria-label="Close modal"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* ================= SCROLLABLE CONTENT BODY ================= */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* VIEW 1: ORDER CONFIRMATION SCREEN */}
+          {placedOrder ? (
+            <div className="space-y-6 py-2">
+              {/* Success Badge */}
+              <div className="text-center space-y-2">
+                <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-sm">
+                  <Sparkles className="w-8 h-8" />
+                </div>
+                <h4 className="text-xl font-bold text-slate-900">
+                  Thank You for Your Order!
+                </h4>
+                <p className="text-xs text-slate-600 max-w-sm mx-auto">
+                  Your order has been transmitted directly to our pharmacy
+                  counter at Sector 35C.
+                </p>
+              </div>
+
+              {/* Delivery Timeline Card */}
+              <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50 space-y-2">
+                <div className="flex items-center gap-2 text-emerald-800 font-bold text-sm">
+                  <Truck className="w-4 h-4 text-emerald-700" />
+                  {placedOrder.isLocal
+                    ? "Same-Day Tricity Dispatch"
+                    : "Pan-India Courier Dispatch"}
+                </div>
+                <p className="text-xs text-emerald-900 leading-relaxed">
+                  {placedOrder.isLocal ? (
+                    <>
+                      Our pharmacist is packing your items at{" "}
+                      <strong>Booth No. 13, Sector 35C</strong>. Estimated
+                      delivery is within <strong>1 to 2 hours</strong> via local
+                      rider.
+                    </>
+                  ) : (
+                    <>
+                      Your package will be securely shipped via our express
+                      courier partner. Estimated delivery is{" "}
+                      <strong>3 to 5 business days</strong> with tracking
+                      provided on WhatsApp.
+                    </>
+                  )}
+                </p>
+              </div>
+
+              {/* Order Summary Details */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 text-xs">
+                <div className="flex justify-between text-slate-600 pb-2 border-b border-slate-200">
+                  <span>Recipient:</span>
+                  <span className="font-semibold text-slate-900">
+                    {placedOrder.customerName} ({placedOrder.customerPhone})
+                  </span>
+                </div>
+                <div className="flex justify-between text-slate-600 pb-2 border-b border-slate-200">
+                  <span>Delivery Address:</span>
+                  <span className="font-semibold text-slate-900 text-right max-w-[200px] truncate">
+                    {placedOrder.address}, {placedOrder.city}
+                  </span>
+                </div>
+                <div className="flex justify-between text-slate-600 pb-2 border-b border-slate-200">
+                  <span>Payment Method:</span>
+                  <span className="font-semibold text-slate-900">
+                    {placedOrder.paymentMethod}
+                  </span>
+                </div>
+                <div className="flex justify-between text-slate-900 font-bold text-sm pt-1">
+                  <span>Total Paid / Payable:</span>
+                  <span className="text-emerald-700 font-bold">
+                    ₹{placedOrder.totalAmount}
+                  </span>
+                </div>
+              </div>
+
+              {/* 1-Tap WhatsApp Support Button */}
+              <div className="space-y-3 pt-2">
+                <a
+                  href={`https://wa.me/919872633001?text=Hi%20Getwell%20Medicos,%20I%20just%20placed%20Order%20%23${placedOrder.orderId}.%20Please%20confirm%20dispatch.`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-sm transition cursor-pointer"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  Chat with Pharmacist on WhatsApp
+                </a>
+
+                <button
+                  onClick={() => {
+                    if (onClearCart) onClearCart();
+                    onClose();
+                  }}
+                  className="w-full py-3 px-4 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl text-xs transition cursor-pointer"
+                >
+                  Continue Shopping
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* VIEW 2: CHECKOUT FORM */
+            <form onSubmit={handleSubmitOrder} className="space-y-5">
+              {errorMsg && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
+                  <span>{errorMsg}</span>
+                </div>
+              )}
+
+              {/* Full Name */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5 text-slate-400" /> Full Name *
+                </label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. Gurpreet Singh"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full bg-[#faf9f5] border border-gray-300 rounded-xl px-3.5 py-2.5 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#071610]"
+                  value={formData.name}
+                  onChange={(e) =>
+                    setFormData({ ...formData, name: e.target.value })
+                  }
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-emerald-500 transition"
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Mobile Number (WhatsApp) *</label>
+              {/* WhatsApp Mobile Number */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                  <Phone className="w-3.5 h-3.5 text-slate-400" /> Mobile Number
+                  (WhatsApp) *
+                </label>
                 <input
                   type="tel"
                   required
+                  maxLength={10}
                   placeholder="e.g. 9872633001"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="w-full bg-[#faf9f5] border border-gray-300 rounded-xl px-3.5 py-2.5 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#071610]"
+                  value={formData.phone}
+                  onChange={(e) =>
+                    setFormData({ ...formData, phone: e.target.value })
+                  }
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-emerald-500 transition"
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Complete Delivery Address *</label>
+              {/* Street Address */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-slate-400" /> Complete
+                  Delivery Address *
+                </label>
                 <textarea
-                  rows="2"
                   required
+                  rows={2}
                   placeholder="House / Flat No., Sector or Locality, Landmark"
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  className="w-full bg-[#faf9f5] border border-gray-300 rounded-xl px-3.5 py-2.5 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#071610]"
-                ></textarea>
+                  value={formData.address}
+                  onChange={(e) =>
+                    setFormData({ ...formData, address: e.target.value })
+                  }
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-emerald-500 transition resize-none"
+                />
               </div>
 
+              {/* City & Pincode */}
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">City</label>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-700">
+                    City
+                  </label>
                   <input
                     type="text"
                     required
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    className="w-full bg-[#faf9f5] border border-gray-300 rounded-xl px-3.5 py-2.5 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#071610]"
+                    value={formData.city}
+                    onChange={(e) =>
+                      setFormData({ ...formData, city: e.target.value })
+                    }
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-emerald-500 transition"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Pincode *</label>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-700">
+                    Pincode *
+                  </label>
                   <input
                     type="text"
                     required
-                    value={pincode}
-                    onChange={(e) => setPincode(e.target.value)}
-                    className="w-full bg-[#faf9f5] border border-gray-300 rounded-xl px-3.5 py-2.5 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#071610]"
+                    maxLength={6}
+                    value={formData.pincode}
+                    onChange={(e) =>
+                      setFormData({ ...formData, pincode: e.target.value })
+                    }
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-emerald-500 transition"
                   />
                 </div>
+              </div>
+
+              {/* Delivery Estimation Pill */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs flex items-center gap-2">
+                <Truck className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                <span className="text-slate-600">
+                  {isLocalDelivery ? (
+                    <strong className="text-emerald-700">
+                      Tricity Express: 1–2 hours local bike rider
+                    </strong>
+                  ) : (
+                    <strong className="text-slate-800">
+                      Pan-India Courier: 3–5 business days
+                    </strong>
+                  )}
+                </span>
               </div>
 
               {/* Payment Method Selector */}
-              <div className="pt-2">
-                <label className="block text-xs font-bold text-gray-700 mb-2">Select Payment Method</label>
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-slate-700">
+                  Select Payment Method
+                </label>
                 <div className="grid grid-cols-2 gap-3">
+                  {/* Razorpay UPI/Cards */}
                   <button
                     type="button"
-                    onClick={() => setPayMethod('RAZORPAY')}
-                    className={`p-3 rounded-xl border text-left transition-all ${
-                      payMethod === 'RAZORPAY'
-                        ? 'border-[#071610] bg-[#071610] text-white shadow-sm'
-                        : 'border-gray-200 bg-white text-gray-800 hover:bg-gray-50'
+                    onClick={() =>
+                      setFormData({ ...formData, paymentMethod: "razorpay" })
+                    }
+                    className={`p-3 rounded-xl border text-left flex flex-col justify-between transition cursor-pointer ${
+                      formData.paymentMethod === "razorpay"
+                        ? "border-emerald-600 bg-emerald-50/50 ring-2 ring-emerald-500/20"
+                        : "border-slate-200 hover:bg-slate-50"
                     }`}
                   >
-                    <p className="text-xs font-bold">UPI / Cards / Netbanking</p>
-                    <p className="text-[10px] opacity-80 mt-0.5">Fast 1-Click Razorpay</p>
+                    <div className="flex items-center justify-between">
+                      <CreditCard
+                        className={`w-4 h-4 ${formData.paymentMethod === "razorpay" ? "text-emerald-600" : "text-slate-400"}`}
+                      />
+                      <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">
+                        FAST
+                      </span>
+                    </div>
+                    <div className="mt-2">
+                      <p className="text-xs font-bold text-slate-900">
+                        UPI / Cards / Netbanking
+                      </p>
+                      <p className="text-[10px] text-slate-500">
+                        Fast 1-Click Razorpay
+                      </p>
+                    </div>
                   </button>
 
+                  {/* Cash on Delivery */}
                   <button
                     type="button"
-                    onClick={() => setPayMethod('COD')}
-                    className={`p-3 rounded-xl border text-left transition-all ${
-                      payMethod === 'COD'
-                        ? 'border-[#071610] bg-[#071610] text-white shadow-sm'
-                        : 'border-gray-200 bg-white text-gray-800 hover:bg-gray-50'
+                    onClick={() =>
+                      setFormData({ ...formData, paymentMethod: "cod" })
+                    }
+                    className={`p-3 rounded-xl border text-left flex flex-col justify-between transition cursor-pointer ${
+                      formData.paymentMethod === "cod"
+                        ? "border-emerald-600 bg-emerald-50/50 ring-2 ring-emerald-500/20"
+                        : "border-slate-200 hover:bg-slate-50"
                     }`}
                   >
-                    <p className="text-xs font-bold">Cash on Delivery</p>
-                    <p className="text-[10px] opacity-80 mt-0.5">Pay on doorstep arrival</p>
+                    <Banknote
+                      className={`w-4 h-4 ${formData.paymentMethod === "cod" ? "text-emerald-600" : "text-slate-400"}`}
+                    />
+                    <div className="mt-2">
+                      <p className="text-xs font-bold text-slate-900">
+                        Cash on Delivery
+                      </p>
+                      <p className="text-[10px] text-slate-500">
+                        Pay on doorstep arrival
+                      </p>
+                    </div>
                   </button>
                 </div>
               </div>
 
-              {/* Order Summary Box */}
-              <div className="bg-[#faf9f5] border border-gray-200 rounded-xl p-3.5 space-y-1.5 text-xs">
-                <div className="flex justify-between text-gray-600">
-                  <span>Items Total ({cartItems.length} products)</span>
+              {/* Order Pricing Breakdown */}
+              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-1.5 text-xs">
+                <div className="flex justify-between text-slate-600">
+                  <span>
+                    Items Total (
+                    {cartItems.reduce((acc, i) => acc + i.quantity, 0)} items)
+                  </span>
                   <span>₹{subtotal}</span>
                 </div>
-                <div className="flex justify-between text-gray-600">
+                <div className="flex justify-between text-slate-600">
                   <span>Delivery Fare</span>
-                  <span className="text-emerald-800 font-bold">{deliveryNote}</span>
+                  <span>
+                    {isFreeDelivery ? (
+                      <strong className="text-emerald-600">FREE</strong>
+                    ) : (
+                      `₹${deliveryFare}`
+                    )}
+                  </span>
                 </div>
-                <div className="flex justify-between text-sm font-bold text-gray-900 pt-1.5 border-t border-gray-200">
+                <div className="flex justify-between text-slate-900 font-bold text-sm pt-1.5 border-t border-slate-200">
                   <span>Payable Total</span>
-                  <span>₹{subtotal}</span>
+                  <span className="text-emerald-700 font-bold">
+                    ₹{totalAmount}
+                  </span>
                 </div>
               </div>
 
+              {/* Submit CTA */}
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-[#071610] hover:bg-[#1a382b] text-white py-3.5 rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2"
+                className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-bold rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md transition cursor-pointer active:scale-[0.99]"
               >
-                {loading ? 'Processing...' : `Confirm & Place Order (₹${subtotal})`}
+                {loading ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <span>Confirm & Place Order (₹{totalAmount})</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
             </form>
-          </div>
-        ) : (
-          /* High-Converting Order Confirmation Screen */
-          <div className="text-center py-4 space-y-4 animate-in zoom-in-95 duration-200">
-            <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center mx-auto shadow-inner">
-              <svg className="w-9 h-9 text-emerald-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded">
-                Order Received • Sector 35C Counter
-              </span>
-              <h2 className="text-2xl font-extrabold text-gray-900 mt-1">Thank You, {placedOrder.customerName}!</h2>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Your order <span className="font-bold text-gray-800">#{placedOrder.orderNumber}</span> has been confirmed.
-              </p>
-            </div>
-
-            {/* Smart Delivery Timeline Box */}
-            <div className="bg-[#f0f7f3] border border-[#cbe3d5] p-3.5 rounded-2xl text-left flex items-start gap-3 text-xs text-gray-800">
-              <span className="text-xl">
-                {isLocalTricity(placedOrder.pincode, placedOrder.city) ? '🚴' : '📦'}
-              </span>
-              <div>
-                <p className="font-bold text-[#1f4231]">
-                  {isLocalTricity(placedOrder.pincode, placedOrder.city)
-                    ? 'Same-Day Tricity Bike Dispatch'
-                    : 'All-India Courier / Speed Post Dispatch'}
-                </p>
-                <p className="text-[11px] text-gray-600 mt-0.5 leading-relaxed">
-                  {isLocalTricity(placedOrder.pincode, placedOrder.city)
-                    ? 'Our pharmacist is packing your items at Booth No. 13, Sector 35C. Estimated delivery is within 1 to 2 hours.'
-                    : 'Your order is being packaged at our Sector 35C counter. It will be dispatched via courier within 24 hours (Estimated delivery: 3 to 5 business days).'}
-                </p>
-              </div>
-            </div>
-
-            {/* Order Details Receipt Box */}
-            <div className="bg-[#faf9f5] border border-gray-200 rounded-2xl p-4 text-left text-xs space-y-2">
-              <div className="flex justify-between items-center pb-2 border-b border-gray-200">
-                <span className="text-gray-500">Delivery Address:</span>
-                <span className="font-semibold text-gray-900 text-right max-w-[65%] truncate">
-                  {placedOrder.address}, {placedOrder.city} ({placedOrder.pincode})
-                </span>
-              </div>
-              <div className="flex justify-between items-center pb-2 border-b border-gray-200">
-                <span className="text-gray-500">Payment Status:</span>
-                <span className="font-bold text-emerald-800">{placedOrder.payMethod}</span>
-              </div>
-              <div className="flex justify-between items-center pt-1 font-bold text-gray-900">
-                <span>Total Amount:</span>
-                <span className="text-base font-extrabold text-[#071610]">₹{placedOrder.total}</span>
-              </div>
-            </div>
-
-            {/* Support Note */}
-            <div className="text-[11px] text-gray-500 space-y-1">
-              <p>📱 An automated order receipt has been sent to your WhatsApp number.</p>
-              <p>
-                Need urgent help? Call our counter:{' '}
-                <a href="tel:+919872633001" className="font-bold text-[#071610] underline">
-                  +91 9872633001
-                </a>
-              </p>
-            </div>
-
-            <button
-              onClick={handleModalClose}
-              className="w-full bg-[#071610] hover:bg-[#1a382b] text-white py-3.5 rounded-xl text-xs font-bold transition-all shadow-md mt-2"
-            >
-              Continue Shopping
-            </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

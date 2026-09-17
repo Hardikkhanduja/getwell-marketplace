@@ -15,6 +15,7 @@ import Footer from "./components/Footer";
 import FloatingContact from "./components/FloatingContact";
 import PrescriptionModal from "./components/PrescriptionModal";
 import AdminOrdersPortal from "./components/AdminOrdersPortal";
+import PolicyModal from "./components/PolicyModal";
 
 // Helper to normalize Supabase row into standard app product object
 function normalizeProduct(p) {
@@ -67,6 +68,10 @@ export default function App() {
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [modalQty, setModalQty] = useState(1);
+  const [policyModal, setPolicyModal] = useState({
+    isOpen: false,
+    tab: "terms",
+  });
 
   const GOOGLE_MAPS_URL =
     "https://www.google.com/maps?daddr=Booth+No.+13,+Sub.+City+Center,+35C,+Sector+35,+Chandigarh,+160022";
@@ -333,10 +338,7 @@ export default function App() {
 
       <StoreLocationSection mapsUrl={GOOGLE_MAPS_URL} />
       <ReviewsSection />
-      <Footer
-        mapsUrl={GOOGLE_MAPS_URL}
-        onOpenAdmin={() => setIsAdminOpen(true)}
-      />
+      <Footer onOpenPolicy={(tab) => setPolicyModal({ isOpen: true, tab })} />
 
       {/* Overlays & Modals */}
       <CartDrawer
@@ -386,6 +388,12 @@ export default function App() {
       />
 
       <FloatingContact />
+
+      <PolicyModal
+        isOpen={policyModal.isOpen}
+        onClose={() => setPolicyModal((prev) => ({ ...prev, isOpen: false }))}
+        initialTab={policyModal.tab}
+      />
     </div>
   );
 }
