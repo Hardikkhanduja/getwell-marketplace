@@ -81,17 +81,23 @@ export default function AdminOrdersPortal({ onExitToStore }) {
     setPin("");
   };
 
-  // 2. Fetch Orders
+  // 2. Safe Fetch Orders from Supabase
   const fetchOrders = async () => {
     setLoadingOrders(true);
     try {
-      const { data, error } = await supabase
-        .from("orders")
-        .select("*")
-        .order("created_at", { ascending: false });
+      // Fetch without strict ordering first, then sort in JS
+      const { data, error } = await supabase.from("orders").select("*");
 
-      if (!error && data) {
-        setOrders(data);
+      console.log("Orders query result:", { data, error });
+
+      if (!error && Array.isArray(data)) {
+        // Sort newest first safely
+        const sorted = [...data].sort((a, b) => {
+          const dateA = new Date(a.created_at || 0).getTime();
+          const dateB = new Date(b.created_at || 0).getTime();
+          return dateB - dateA;
+        });
+        setOrders(sorted);
       }
     } catch (err) {
       console.warn("Orders fetch error:", err);
