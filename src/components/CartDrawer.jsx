@@ -1,252 +1,318 @@
-﻿import React from "react";
+﻿// src/components/CartDrawer.jsx
+import React from "react";
+import {
+  X,
+  Trash2,
+  Plus,
+  Minus,
+  ShoppingBag,
+  ArrowRight,
+  Truck,
+  ShieldCheck,
+  AlertCircle,
+  Sparkles,
+} from "lucide-react";
+
+const MIN_ORDER_VALUE = 199; // ₹199 Minimum for home delivery
+const FREE_SHIPPING_THRESHOLD = 799; // ₹799 for free delivery
 
 export default function CartDrawer({
   isOpen,
   onClose,
-  cart,
+  cartItems = [],
   onUpdateQuantity,
-  onRemoveFromCart,
+  onRemoveItem,
   onProceedToCheckout,
 }) {
   if (!isOpen) return null;
 
-  const MIN_ORDER_VALUE = 199;
-  const FREE_SHIPPING_THRESHOLD = 799;
+  const safeItems = Array.isArray(cartItems) ? cartItems : [];
 
-  const totalCount = cart.reduce((acc, item) => acc + item.quantity, 0);
-  const cartTotal = cart.reduce(
-    (acc, item) => acc + item.price * item.quantity,
+  const subtotal = safeItems.reduce(
+    (sum, item) =>
+      sum + (Number(item?.price) || 0) * (Number(item?.quantity) || 1),
+    0,
+  );
+  const totalMrp = safeItems.reduce(
+    (sum, item) =>
+      sum +
+      (Number(item?.mrp || item?.price) || 0) * (Number(item?.quantity) || 1),
+    0,
+  );
+  const totalSavings = Math.max(0, totalMrp - subtotal);
+  const totalQuantity = safeItems.reduce(
+    (acc, item) => acc + (Number(item?.quantity) || 1),
     0,
   );
 
-  const isBelowMinOrder = cartTotal < MIN_ORDER_VALUE;
-  const amountNeededForMin = MIN_ORDER_VALUE - cartTotal;
-  const amountNeededForFreeShip = FREE_SHIPPING_THRESHOLD - cartTotal;
-
-  // Free shipping progress percentage (max 100%)
-  const freeShipPercent = Math.min(
+  const isFreeShipping = subtotal >= FREE_SHIPPING_THRESHOLD;
+  const shippingRemaining = Math.max(0, FREE_SHIPPING_THRESHOLD - subtotal);
+  const freeShippingProgress = Math.min(
     100,
-    Math.round((cartTotal / FREE_SHIPPING_THRESHOLD) * 100),
+    (subtotal / FREE_SHIPPING_THRESHOLD) * 100,
   );
 
-  return (
-    <div className="fixed inset-0 z-50 overflow-hidden animate-in fade-in duration-200">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
-        onClick={onClose}
-      ></div>
+  const isMinOrderMet = subtotal >= MIN_ORDER_VALUE;
+  const minOrderShortage = Math.max(0, MIN_ORDER_VALUE - subtotal);
 
-      <div className="fixed inset-y-0 right-0 pl-10 max-w-full flex">
-        <div className="w-screen max-w-md bg-white p-6 shadow-2xl flex flex-col justify-between">
-          <div>
-            {/* Drawer Header */}
-            <div className="flex justify-between items-center pb-4 border-b border-gray-100">
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-gray-900">
-                  Your Shopping Bag
-                </h2>
-                <span className="text-xs font-bold bg-[#e8f2ec] text-[#2c5240] px-2 py-0.5 rounded-full">
-                  {totalCount} {totalCount === 1 ? "item" : "items"}
-                </span>
+  const getProductImage = (item) => {
+    if (Array.isArray(item?.image_urls) && item.image_urls.length > 0) {
+      return item.image_urls[0];
+    }
+    if (typeof item?.image_url === "string" && item.image_url.trim()) {
+      return item.image_url.trim();
+    }
+    if (typeof item?.image === "string" && item.image.trim()) {
+      return item.image.trim();
+    }
+    return "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=300";
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-hidden font-sans">
+      {/* Dim Backdrop */}
+      <div
+        onClick={onClose}
+        className="absolute inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity cursor-pointer animate-fadeIn"
+      />
+
+      <div className="fixed inset-y-0 right-0 max-w-full flex pl-6 sm:pl-10 h-full">
+        <div className="w-screen max-w-md bg-white shadow-2xl flex flex-col h-full overflow-hidden border-l border-slate-100 animate-slideLeft">
+          {/* 1. FIXED TOP HEADER (NEVER CLIPS) */}
+          <div className="flex-shrink-0 px-6 py-4 bg-white border-b border-slate-100 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-emerald-50 text-emerald-700 rounded-xl flex items-center justify-center font-bold border border-emerald-100">
+                <ShoppingBag className="w-4 h-4" />
               </div>
-              <button
-                onClick={onClose}
-                className="text-gray-400 hover:text-gray-600 p-1.5 rounded-xl hover:bg-gray-100 transition-colors"
-                aria-label="Close bag"
-              >
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2.5"
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
+              <div>
+                <h2 className="text-base font-extrabold text-slate-900 leading-tight">
+                  Medicine Bag
+                </h2>
+                <p className="text-[11px] text-slate-400 font-medium">
+                  {totalQuantity} {totalQuantity === 1 ? "item" : "items"} •
+                  Dispatch from Sec 35C
+                </p>
+              </div>
             </div>
 
-            {/* Free Shipping Progress Indicator */}
-            {cart.length > 0 && (
-              <div className="mt-3.5 bg-[#faf9f5] border border-gray-200 rounded-2xl p-3 space-y-1.5">
-                <div className="flex justify-between items-center text-[11px]">
-                  {cartTotal >= FREE_SHIPPING_THRESHOLD ? (
-                    <span className="font-bold text-emerald-800 flex items-center gap-1">
-                      🎉 You unlocked <strong>FREE Delivery</strong> across
-                      Tricity!
+            <button
+              onClick={onClose}
+              className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition cursor-pointer"
+              aria-label="Close cart"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* 2. FIXED FREE DELIVERY GOAL BAR */}
+          {safeItems.length > 0 && (
+            <div className="flex-shrink-0 bg-slate-50 px-6 py-2.5 border-b border-slate-100">
+              <div className="flex items-center justify-between text-[11px] font-bold text-slate-700 mb-1.5">
+                <span className="flex items-center gap-1.5 truncate">
+                  <Truck className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+                  {isFreeShipping ? (
+                    <span className="text-emerald-700 font-bold flex items-center gap-1">
+                      <Sparkles className="w-3.5 h-3.5" /> FREE Express Delivery
+                      Unlocked!
                     </span>
                   ) : (
-                    <span className="text-gray-600">
-                      Add <strong>₹{amountNeededForFreeShip}</strong> more for{" "}
-                      <strong>FREE Delivery</strong>!
+                    <span>
+                      Add{" "}
+                      <strong className="text-slate-900">
+                        ₹{shippingRemaining}
+                      </strong>{" "}
+                      more for Free Delivery
                     </span>
                   )}
-                  <span className="font-bold text-gray-800">
-                    {freeShipPercent}%
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 h-1.5 rounded-full overflow-hidden">
-                  <div
-                    className="bg-[#2c5240] h-full transition-all duration-300 rounded-full"
-                    style={{ width: `${freeShipPercent}%` }}
-                  ></div>
-                </div>
+                </span>
+                <span className="text-slate-500 font-mono text-[10px]">
+                  {Math.round(freeShippingProgress)}%
+                </span>
               </div>
-            )}
 
-            {/* Cart Items List */}
-            <div className="divide-y divide-gray-100 max-h-[50vh] overflow-y-auto mt-3 pr-1">
-              {cart.length === 0 ? (
-                <div className="py-16 text-center space-y-3">
-                  <div className="w-12 h-12 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center mx-auto text-xl">
-                    🛍️
-                  </div>
-                  <p className="text-xs text-gray-500 font-medium">
-                    Your shopping bag is empty.
-                  </p>
+              <div className="w-full bg-slate-200/80 rounded-full h-1.5 overflow-hidden">
+                <div
+                  className="bg-emerald-600 h-1.5 rounded-full transition-all duration-500 ease-out"
+                  style={{ width: `${freeShippingProgress}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* 3. SCROLLABLE MIDDLE CART ITEMS ONLY */}
+          <div className="flex-1 overflow-y-auto px-6 py-2 divide-y divide-slate-100">
+            {safeItems.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-center py-12 space-y-3">
+                <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-300 border border-slate-100">
+                  <ShoppingBag className="w-8 h-8" />
                 </div>
-              ) : (
-                cart.map((item) => {
-                  const itemImg =
-                    item.images && item.images.length > 0
-                      ? item.images[0]
-                      : item.image;
-                  return (
-                    <div
-                      key={item.id}
-                      className="py-3.5 flex items-center justify-between gap-3 group"
-                    >
+                <h3 className="text-sm font-bold text-slate-800">
+                  Your bag is empty
+                </h3>
+                <p className="text-xs text-slate-400 max-w-xs leading-relaxed">
+                  Explore genuine skincare, doctor prescriptions, and baby care
+                  essentials from our Sector 35C counter.
+                </p>
+                <button
+                  onClick={onClose}
+                  className="mt-2 px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition cursor-pointer shadow-xs"
+                >
+                  Browse Catalog
+                </button>
+              </div>
+            ) : (
+              safeItems.map((item) => {
+                const itemName =
+                  item?.name || item?.title || "Pharmacy Product";
+                const itemBrand =
+                  item?.brand || item?.brand_name || "Pharma Grade";
+                const itemPrice = Number(item?.price) || 0;
+                const itemMrp = Number(item?.mrp || item?.price) || itemPrice;
+                const itemQty = Number(item?.quantity) || 1;
+
+                return (
+                  <div key={item.id} className="py-4 flex gap-3.5 items-center">
+                    {/* Thumbnail Box */}
+                    <div className="w-16 h-16 rounded-xl border border-slate-200/80 bg-slate-50 p-1 flex-shrink-0 flex items-center justify-center">
                       <img
-                        src={itemImg}
-                        alt={item.name}
+                        src={getProductImage(item)}
+                        alt={itemName}
+                        className="w-full h-full object-contain"
                         onError={(e) => {
-                          e.currentTarget.src =
-                            "https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=600&q=80";
+                          e.target.src =
+                            "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=300";
                         }}
-                        className="w-12 h-12 object-contain bg-[#fbfbfa] border border-gray-100 rounded-xl p-1 shrink-0"
                       />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold text-gray-900 truncate">
-                          {item.name}
-                        </p>
-                        <p className="text-xs text-gray-600 font-bold mt-0.5">
-                          ₹{item.price}
-                        </p>
-                      </div>
+                    </div>
 
-                      <div className="flex items-center gap-2">
-                        {/* Quantity Counter */}
-                        <div className="flex items-center border border-gray-200 rounded-xl px-1.5 py-0.5 bg-gray-50 shadow-sm">
-                          <button
-                            onClick={() => onUpdateQuantity(item.id, -1)}
-                            className="text-xs font-bold text-gray-600 hover:text-black px-1.5 py-0.5"
-                            aria-label="Decrease quantity"
-                          >
-                            -
-                          </button>
-                          <span className="text-xs font-bold px-1.5 text-gray-900">
-                            {item.quantity}
+                    {/* Details */}
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-xs font-bold text-slate-900 truncate leading-snug">
+                        {itemName}
+                      </h4>
+                      <p className="text-[10px] text-slate-400 truncate mt-0.5">
+                        {itemBrand} {item.unit ? `• ${item.unit}` : ""}
+                      </p>
+                      <div className="flex items-baseline gap-1.5 mt-1">
+                        <span className="text-xs font-extrabold text-emerald-700">
+                          ₹{itemPrice}
+                        </span>
+                        {itemMrp > itemPrice && (
+                          <span className="text-[10px] text-slate-400 line-through">
+                            ₹{itemMrp}
                           </span>
-                          <button
-                            onClick={() => onUpdateQuantity(item.id, 1)}
-                            className="text-xs font-bold text-gray-600 hover:text-black px-1.5 py-0.5"
-                            aria-label="Increase quantity"
-                          >
-                            +
-                          </button>
-                        </div>
+                        )}
+                      </div>
+                    </div>
 
-                        {/* Delete Button */}
+                    {/* Stepper & Trash */}
+                    <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                      <button
+                        onClick={() => onRemoveItem(item.id)}
+                        className="text-slate-300 hover:text-rose-500 p-1 transition cursor-pointer"
+                        title="Remove item"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+
+                      <div className="flex items-center border border-slate-200 rounded-lg bg-slate-50 shadow-2xs">
                         <button
-                          onClick={() => onRemoveFromCart(item.id)}
-                          title="Remove from bag"
-                          className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                          aria-label="Remove item"
+                          onClick={() =>
+                            onUpdateQuantity(item.id, Math.max(1, itemQty - 1))
+                          }
+                          disabled={itemQty <= 1}
+                          className="p-1.5 text-slate-500 hover:text-slate-900 disabled:opacity-30 transition cursor-pointer"
                         >
-                          <svg
-                            className="w-4 h-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth="2"
-                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                            />
-                          </svg>
+                          <Minus className="w-3 h-3" />
+                        </button>
+                        <span className="px-2 text-xs font-bold text-slate-800 min-w-[20px] text-center">
+                          {itemQty}
+                        </span>
+                        <button
+                          onClick={() => onUpdateQuantity(item.id, itemQty + 1)}
+                          className="p-1.5 text-slate-500 hover:text-slate-900 transition cursor-pointer"
+                        >
+                          <Plus className="w-3 h-3" />
                         </button>
                       </div>
                     </div>
-                  );
-                })
-              )}
-            </div>
+                  </div>
+                );
+              })
+            )}
           </div>
 
-          {/* Drawer Footer & Checkout Action */}
-          {cart.length > 0 && (
-            <div className="pt-4 border-t border-gray-100 space-y-3 bg-white">
-              <div className="flex justify-between text-sm font-bold text-gray-900">
-                <span>Products Subtotal</span>
-                <span className="text-base font-extrabold text-[#071610]">
-                  ₹{cartTotal}
-                </span>
+          {/* 4. FIXED BILL SUMMARY & CHECKOUT (PINNED AT BOTTOM) */}
+          {safeItems.length > 0 && (
+            <div className="flex-shrink-0 border-t border-slate-100 bg-white p-5 space-y-3.5 shadow-lg">
+              {/* Pricing Breakdown */}
+              <div className="space-y-1.5 text-xs">
+                <div className="flex justify-between text-slate-500">
+                  <span>Item Total (MRP)</span>
+                  <span className="font-mono">₹{totalMrp}</span>
+                </div>
+                {totalSavings > 0 && (
+                  <div className="flex justify-between text-emerald-700 font-semibold">
+                    <span>Direct Pharmacy Discount</span>
+                    <span className="font-mono">-₹{totalSavings}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-slate-500">
+                  <span>Delivery Estimate</span>
+                  <span>
+                    {isFreeShipping ? (
+                      <strong className="text-emerald-700">FREE</strong>
+                    ) : (
+                      "Calculated at checkout"
+                    )}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm font-extrabold text-slate-900 pt-2 border-t border-slate-100">
+                  <span>Total Payable</span>
+                  <span className="text-emerald-700 font-bold text-base">
+                    ₹{subtotal}
+                  </span>
+                </div>
               </div>
 
-              {/* Minimum Order Check (₹199 Threshold) */}
-              {isBelowMinOrder ? (
-                <div className="space-y-2">
-                  <div className="bg-amber-50 border border-amber-200/80 p-2.5 rounded-xl text-center text-xs text-amber-900 font-medium">
-                    ⚠️ Minimum home delivery order is{" "}
-                    <strong>₹{MIN_ORDER_VALUE}</strong>. Add{" "}
-                    <strong>₹{amountNeededForMin}</strong> more to checkout.
+              {/* Clean Minimum Order Notice */}
+              {!isMinOrderMet ? (
+                <div className="p-3 bg-amber-50/80 border border-amber-200/80 rounded-2xl text-xs text-amber-900 flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div className="leading-relaxed">
+                    <p className="font-bold text-amber-950">
+                      Minimum Delivery: ₹199
+                    </p>
+                    <p className="text-[11px] text-amber-800 mt-0.5">
+                      Add items worth <strong>₹{minOrderShortage}</strong> more
+                      to order for doorstep dispatch.
+                    </p>
                   </div>
-                  <p className="text-[11px] text-gray-500 text-center">
-                    *For single items below ₹199, visit our{" "}
-                    <strong>Sector 35C counter</strong> in person!
-                  </p>
-                  <button
-                    disabled
-                    className="w-full bg-gray-200 text-gray-400 py-3.5 rounded-xl text-xs font-bold cursor-not-allowed transition-all"
-                  >
-                    Minimum Order Required: ₹{MIN_ORDER_VALUE} (Current: ₹
-                    {cartTotal})
-                  </button>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  <p className="text-[11px] text-gray-500">
-                    *Tricity bike dispatch calculated at actual distance fare /
-                    Free above ₹799.
-                  </p>
-                  <button
-                    onClick={onProceedToCheckout}
-                    className="w-full bg-[#071610] hover:bg-[#2c5240] text-white py-3.5 rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2"
-                  >
-                    <span>Proceed to Order (₹{cartTotal})</span>
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M14 5l7 7m0 0l-7 7m7-7H3"
-                      />
-                    </svg>
-                  </button>
+                <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+                  <span>Inspected & verified by on-duty pharmacist</span>
                 </div>
               )}
+
+              {/* Checkout CTA */}
+              <button
+                disabled={!isMinOrderMet}
+                onClick={onProceedToCheckout}
+                className={`w-full py-3.5 px-4 rounded-2xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md transition-all ${
+                  isMinOrderMet
+                    ? "bg-slate-900 hover:bg-slate-800 text-white cursor-pointer active:scale-98 shadow-slate-900/10"
+                    : "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed"
+                }`}
+              >
+                <span>
+                  {isMinOrderMet
+                    ? "Proceed to Checkout"
+                    : `Add ₹${minOrderShortage} more to Order`}
+                </span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
             </div>
           )}
         </div>

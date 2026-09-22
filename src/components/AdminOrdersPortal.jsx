@@ -4,25 +4,22 @@ import {
   Lock,
   Package,
   PlusCircle,
-  Truck,
   CheckCircle2,
-  Clock,
   Phone,
   MapPin,
   Printer,
-  X,
   Upload,
   Sparkles,
   AlertCircle,
   Layers,
   Image as ImageIcon,
   Trash2,
+  LogOut,
+  RefreshCw,
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 
-const STORE_PINS = ["3500", "9872", "1234"];
-
-export default function AdminOrdersPortal({ onClose, onProductAdded }) {
+export default function AdminOrdersPortal({ onExitToStore }) {
   // Authentication State
   const [pin, setPin] = useState("");
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
@@ -30,15 +27,19 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
   });
   const [pinError, setPinError] = useState(false);
 
-  // Active Navigation Tab: 'orders' | 'add_product'
-  const [activeTab, setActiveTab] = useState("orders");
+  // Tab Navigation: 'orders' | 'inventory' | 'add_product'
+  const [activeTab, setActiveTab] = useState("add_product");
 
-  // Live Orders State
+  // Orders State
   const [orders, setOrders] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [orderFilter, setOrderFilter] = useState("All");
 
-  // Product Creator State
+  // Inventory Products State
+  const [catalogProducts, setCatalogProducts] = useState([]);
+  const [loadingCatalog, setLoadingCatalog] = useState(false);
+
+  // Product Creator Form State
   const [newProduct, setNewProduct] = useState({
     name: "",
     brand: "",
@@ -57,10 +58,14 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
   const [productSuccess, setProductSuccess] = useState("");
   const [productError, setProductError] = useState("");
 
-  // 1. PIN Authentication
+  // 1. PIN Submit (Reads securely from VITE_ADMIN_PIN)
   const handlePinSubmit = (e) => {
     e.preventDefault();
-    if (STORE_PINS.includes(pin.trim())) {
+    const validPins = (import.meta.env.VITE_ADMIN_PIN || "3500")
+      .split(",")
+      .map((p) => p.trim());
+
+    if (validPins.includes(pin.trim())) {
       setIsAuthenticated(true);
       sessionStorage.setItem("getwell_admin_auth", "true");
       setPinError(false);
@@ -76,7 +81,7 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
     setPin("");
   };
 
-  // 2. Fetch Live Orders from Supabase
+  // 2. Fetch Orders
   const fetchOrders = async () => {
     setLoadingOrders(true);
     try {
@@ -89,19 +94,39 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
         setOrders(data);
       }
     } catch (err) {
-      console.warn("Orders fetch note:", err);
+      console.warn("Orders fetch error:", err);
     } finally {
       setLoadingOrders(false);
+    }
+  };
+
+  // 3. Fetch Inventory Products
+  const fetchCatalogProducts = async () => {
+    setLoadingCatalog(true);
+    try {
+      const { data, error } = await supabase
+        .from("products")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (!error && data) {
+        setCatalogProducts(data);
+      }
+    } catch (err) {
+      console.warn("Catalog fetch error:", err);
+    } finally {
+      setLoadingCatalog(false);
     }
   };
 
   useEffect(() => {
     if (isAuthenticated) {
       fetchOrders();
+      fetchCatalogProducts();
     }
   }, [isAuthenticated]);
 
-  // 3. Update Order Status
+  // 4. Update Order Status
   const handleUpdateOrderStatus = async (orderId, newStatus) => {
     try {
       const { error } = await supabase
@@ -121,14 +146,34 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
     }
   };
 
-  // 4. Handle Multi-Image Selection
+  // 5. Delete Product from Supabase
+  const handleDeleteProduct = async (id, name) => {
+    if (
+      !window.confirm(
+        `Are you sure you want to delete "${name}" from the store catalog?`,
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from("products").delete().eq("id", id);
+      if (!error) {
+        setCatalogProducts((prev) => prev.filter((p) => p.id !== id));
+      } else {
+        alert("Could not delete product: " + error.message);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // 6. Handle Multi-Image Selection
   const handleFileChange = (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
 
     setSelectedFiles((prev) => [...prev, ...files]);
-
-    // Generate local previews
     const newPreviews = files.map((file) => URL.createObjectURL(file));
     setFilePreviews((prev) => [...prev, ...newPreviews]);
   };
@@ -138,7 +183,7 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
     setFilePreviews((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // 5. Publish New Product to Supabase
+  // 7. Publish Product to Supabase
   const handleCreateProduct = async (e) => {
     e.preventDefault();
     setProductError("");
@@ -149,7 +194,9 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
       !newProduct.brand.trim() ||
       !newProduct.price
     ) {
-      setProductError("Please fill in product name, brand, and selling price.");
+      setProductError(
+        "Please fill in product title, brand, and selling price.",
+      );
       return;
     }
 
@@ -157,7 +204,7 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
     const uploadedUrls = [];
 
     try {
-      // A. Upload all selected photos to Supabase Storage 'product-images'
+      // Upload all selected images
       if (selectedFiles.length > 0) {
         for (const file of selectedFiles) {
           const fileExt = file.name.split(".").pop();
@@ -180,7 +227,6 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
         }
       }
 
-      // If user provided a fallback URL or no files uploaded
       if (uploadedUrls.length === 0 && newProduct.image_url_fallback.trim()) {
         uploadedUrls.push(newProduct.image_url_fallback.trim());
       }
@@ -189,19 +235,22 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
         uploadedUrls[0] ||
         "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=600";
 
-      // B. Insert into 'products' table (sends both 'name' and 'title' for schema compatibility)
+      // Clean Insert Payload
       const { data, error } = await supabase
         .from("products")
         .insert([
           {
             name: newProduct.name.trim(),
-            title: newProduct.name.trim(), // Supports both 'name' and 'title' columns
+            title: newProduct.name.trim(),
             brand: newProduct.brand.trim(),
+            brand_name: newProduct.brand.trim(),
             category: newProduct.category,
+            concern: newProduct.category,
             unit: newProduct.unit.trim(),
+            size_volume: newProduct.unit.trim(), // <--- Maps pack size to size_volume
             price: Number(newProduct.price),
             mrp: Number(newProduct.mrp || newProduct.price),
-            expiry_date: newProduct.expiry_date.trim() || "Direct Fresh Batch",
+            expiry_date: newProduct.expiry_date.trim() || "Fresh Batch",
             description: newProduct.description.trim(),
             image_url: primaryImage,
             image_urls: uploadedUrls.length > 0 ? uploadedUrls : [primaryImage],
@@ -214,9 +263,7 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
 
       if (error) throw error;
 
-      setProductSuccess(
-        `"${newProduct.name}" published successfully to live storefront!`,
-      );
+      setProductSuccess(`"${newProduct.name}" is now live on your store!`);
 
       // Reset form
       setNewProduct({
@@ -234,16 +281,16 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
       setSelectedFiles([]);
       setFilePreviews([]);
 
-      if (onProductAdded) onProductAdded();
+      fetchCatalogProducts();
     } catch (err) {
-      console.error("Product upload error:", err);
+      console.error("Upload error:", err);
       setProductError(err.message || "Failed to save product to Supabase.");
     } finally {
       setUploadingProduct(false);
     }
   };
 
-  // 6. Print Thermal Slip
+  // 8. Print Thermal Slip
   const handlePrintSlip = (order) => {
     const printWindow = window.open("", "_blank");
     printWindow.document.write(`
@@ -280,60 +327,58 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
     printWindow.document.close();
   };
 
-  // ================= RENDER: PIN LOGIN SCREEN =================
+  // ================= VIEW: PIN AUTHENTICATION GATE =================
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-        <div className="bg-slate-800 border border-slate-700 w-full max-w-sm rounded-2xl p-6 shadow-2xl text-center space-y-5">
-          <div className="w-14 h-14 bg-emerald-500/20 text-emerald-400 rounded-2xl flex items-center justify-center mx-auto">
-            <Lock className="w-7 h-7" />
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 font-sans text-slate-100">
+        <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-8 shadow-2xl text-center space-y-6">
+          <div className="w-16 h-16 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+            <Lock className="w-8 h-8" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-white">
-              Getwell Store Operations
-            </h2>
+            <h2 className="text-xl font-bold text-white">Getwell Store Hub</h2>
             <p className="text-xs text-slate-400 mt-1">
-              Sector 35C Counter • Dispatch & Inventory Hub
+              Authorized Personnel Only
             </p>
           </div>
 
           <form onSubmit={handlePinSubmit} className="space-y-4">
             <input
               type="password"
-              maxLength={6}
-              placeholder="Enter 4-Digit Store PIN"
+              maxLength={8}
+              placeholder="Enter Store PIN"
               value={pin}
               onChange={(e) => setPin(e.target.value)}
-              className="w-full text-center tracking-widest text-lg font-bold py-3 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-emerald-500"
+              className="w-full text-center tracking-widest text-xl font-bold py-3.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-emerald-500 focus:border-emerald-500"
               autoFocus
             />
 
             {pinError && (
               <p className="text-xs text-rose-400 font-semibold">
-                Invalid PIN. Use 3500 or 9872.
+                Incorrect PIN. Access Denied.
               </p>
             )}
 
             <button
               type="submit"
-              className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm transition cursor-pointer"
+              className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm transition cursor-pointer shadow-lg shadow-emerald-900/30"
             >
-              Unlock Operations Portal
+              Unlock Admin Panel
             </button>
           </form>
 
           <button
-            onClick={onClose}
-            className="text-xs text-slate-500 hover:text-slate-300 transition"
+            onClick={onExitToStore}
+            className="text-xs text-slate-500 hover:text-slate-300 transition flex items-center justify-center gap-1.5 mx-auto cursor-pointer"
           >
-            ← Back to Public Store
+            ← Return to Customer Website
           </button>
         </div>
       </div>
     );
   }
 
-  // Quick KPI metrics
+  // Calculate Metrics
   const totalRevenue = orders.reduce(
     (sum, o) => sum + (Number(o.total_amount) || 0),
     0,
@@ -341,29 +386,28 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
   const pendingDispatch = orders.filter(
     (o) => o.order_status === "Received" || o.order_status === "Packed",
   ).length;
-
   const filteredOrders = orders.filter(
     (o) => orderFilter === "All" || o.order_status === orderFilter,
   );
 
-  // ================= RENDER: AUTHENTICATED PORTAL =================
+  // ================= VIEW: AUTHENTICATED STANDALONE ADMIN HUB =================
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col">
-      {/* Top Operations Navbar */}
-      <header className="bg-slate-900 border-b border-slate-800 px-6 py-4 flex items-center justify-between sticky top-0 z-30">
+      {/* Top Admin Navbar */}
+      <header className="bg-slate-900 border-b border-slate-800 px-6 py-4 flex items-center justify-between sticky top-0 z-30 shadow-md">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-emerald-500/20 text-emerald-400 rounded-xl flex items-center justify-center">
+          <div className="w-10 h-10 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl flex items-center justify-center shadow-xs">
             <Layers className="w-5 h-5" />
           </div>
           <div>
             <h1 className="text-base font-bold text-white flex items-center gap-2">
               Getwell Store Operations Hub
-              <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full font-semibold">
+              <span className="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 px-2 py-0.5 rounded-full font-semibold">
                 LIVE
               </span>
             </h1>
             <p className="text-xs text-slate-400">
-              Sector 35C Counter • Dispatch Desk
+              Booth No. 13, Sector 35C, Chandigarh
             </p>
           </div>
         </div>
@@ -371,44 +415,44 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
         <div className="flex items-center gap-3">
           <button
             onClick={handleLogout}
-            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg transition cursor-pointer"
+            className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition cursor-pointer flex items-center gap-1.5"
           >
-            Lock Portal
+            <Lock className="w-3.5 h-3.5" />
+            Lock
           </button>
+
           <button
-            onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition cursor-pointer"
-            title="Close"
+            onClick={onExitToStore}
+            className="px-3.5 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/20 text-xs font-semibold rounded-xl transition cursor-pointer flex items-center gap-1.5"
           >
-            <X className="w-5 h-5" />
+            <LogOut className="w-3.5 h-3.5" />
+            Exit to Store
           </button>
         </div>
       </header>
 
       {/* KPI Stats Bar */}
-      <div className="bg-slate-900/50 border-b border-slate-800/80 px-6 py-4">
+      <div className="bg-slate-900/60 border-b border-slate-800 px-6 py-4">
         <div className="max-w-7xl mx-auto grid grid-cols-3 gap-4">
-          <div className="bg-slate-900 border border-slate-800 p-3.5 rounded-xl">
-            <p className="text-[11px] text-slate-400 font-medium">
-              TOTAL SALES VOLUME
+          <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-xs">
+            <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
+              Total Sales Volume
             </p>
-            <p className="text-lg font-bold text-emerald-400 mt-0.5">
+            <p className="text-xl font-bold text-emerald-400 mt-1">
               ₹{totalRevenue.toLocaleString()}
             </p>
           </div>
-          <div className="bg-slate-900 border border-slate-800 p-3.5 rounded-xl">
-            <p className="text-[11px] text-slate-400 font-medium">
-              TOTAL ORDERS PLACED
+          <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-xs">
+            <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
+              Total Orders Placed
             </p>
-            <p className="text-lg font-bold text-white mt-0.5">
-              {orders.length}
-            </p>
+            <p className="text-xl font-bold text-white mt-1">{orders.length}</p>
           </div>
-          <div className="bg-slate-900 border border-slate-800 p-3.5 rounded-xl">
-            <p className="text-[11px] text-slate-400 font-medium">
-              PENDING DISPATCH
+          <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-xs">
+            <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
+              Pending Dispatches
             </p>
-            <p className="text-lg font-bold text-amber-400 mt-0.5">
+            <p className="text-xl font-bold text-amber-400 mt-1">
               {pendingDispatch}
             </p>
           </div>
@@ -418,6 +462,29 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
       {/* Navigation Tabs */}
       <div className="bg-slate-900 px-6 border-b border-slate-800 flex items-center justify-between">
         <div className="flex gap-2">
+          <button
+            onClick={() => setActiveTab("add_product")}
+            className={`px-4 py-3 text-xs sm:text-sm font-semibold border-b-2 transition cursor-pointer flex items-center gap-2 ${
+              activeTab === "add_product"
+                ? "border-emerald-500 text-emerald-400"
+                : "border-transparent text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <PlusCircle className="w-4 h-4" />+ Add New Medicine / Product
+          </button>
+
+          <button
+            onClick={() => setActiveTab("inventory")}
+            className={`px-4 py-3 text-xs sm:text-sm font-semibold border-b-2 transition cursor-pointer flex items-center gap-2 ${
+              activeTab === "inventory"
+                ? "border-emerald-500 text-emerald-400"
+                : "border-transparent text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <ImageIcon className="w-4 h-4" />
+            Store Catalog ({catalogProducts.length})
+          </button>
+
           <button
             onClick={() => setActiveTab("orders")}
             className={`px-4 py-3 text-xs sm:text-sm font-semibold border-b-2 transition cursor-pointer flex items-center gap-2 ${
@@ -429,192 +496,22 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
             <Package className="w-4 h-4" />
             Customer Orders ({orders.length})
           </button>
-
-          <button
-            onClick={() => setActiveTab("add_product")}
-            className={`px-4 py-3 text-xs sm:text-sm font-semibold border-b-2 transition cursor-pointer flex items-center gap-2 ${
-              activeTab === "add_product"
-                ? "border-emerald-500 text-emerald-400"
-                : "border-transparent text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            <PlusCircle className="w-4 h-4" />+ Add New Medicine / Product
-          </button>
         </div>
       </div>
 
-      {/* Main Tab Content */}
+      {/* Main Form Body */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">
-        {/* ================= TAB 1: ORDERS DISPATCH ================= */}
-        {activeTab === "orders" && (
-          <div className="space-y-6">
-            {/* Filter Pills */}
-            <div className="flex items-center justify-between flex-wrap gap-3">
-              <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                {["All", "Received", "Packed", "Dispatched", "Delivered"].map(
-                  (status) => (
-                    <button
-                      key={status}
-                      onClick={() => setOrderFilter(status)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                        orderFilter === status
-                          ? "bg-emerald-600 text-white"
-                          : "bg-slate-800 text-slate-400 hover:bg-slate-700"
-                      }`}
-                    >
-                      {status}
-                    </button>
-                  ),
-                )}
-              </div>
-
-              <button
-                onClick={fetchOrders}
-                className="text-xs text-emerald-400 hover:underline flex items-center gap-1 cursor-pointer"
-              >
-                ↻ Refresh Live Orders
-              </button>
-            </div>
-
-            {/* Orders Cards Grid */}
-            {loadingOrders ? (
-              <div className="text-center py-12 text-slate-500 text-xs">
-                Loading orders...
-              </div>
-            ) : filteredOrders.length === 0 ? (
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center text-slate-400 text-sm">
-                No orders found under "{orderFilter}".
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredOrders.map((order) => (
-                  <div
-                    key={order.id || order.order_id}
-                    className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-lg flex flex-col justify-between"
-                  >
-                    <div>
-                      {/* Order ID & Status Badge */}
-                      <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                        <div>
-                          <span className="text-xs font-mono text-emerald-400 font-bold">
-                            #{order.order_id}
-                          </span>
-                          <p className="text-[10px] text-slate-500">
-                            {new Date(order.created_at).toLocaleString(
-                              "en-IN",
-                              { timeZone: "Asia/Kolkata" },
-                            )}
-                          </p>
-                        </div>
-
-                        <select
-                          value={order.order_status || "Received"}
-                          onChange={(e) =>
-                            handleUpdateOrderStatus(
-                              order.order_id,
-                              e.target.value,
-                            )
-                          }
-                          className="text-xs font-semibold bg-slate-800 text-emerald-300 border border-slate-700 rounded-lg px-2.5 py-1 focus:outline-emerald-500 cursor-pointer"
-                        >
-                          <option value="Received">📥 Received</option>
-                          <option value="Packed">📦 Packed</option>
-                          <option value="Dispatched">🛵 Dispatched</option>
-                          <option value="Delivered">✅ Delivered</option>
-                        </select>
-                      </div>
-
-                      {/* Customer Details */}
-                      <div className="py-3 space-y-1.5 text-xs text-slate-300">
-                        <p className="font-bold text-white flex items-center justify-between">
-                          <span>{order.customer_name}</span>
-                          <a
-                            href={`tel:${order.customer_phone}`}
-                            className="text-emerald-400 hover:underline flex items-center gap-1 font-mono text-[11px]"
-                          >
-                            <Phone className="w-3 h-3" /> {order.customer_phone}
-                          </a>
-                        </p>
-                        <p className="text-slate-400 flex items-start gap-1">
-                          <MapPin className="w-3.5 h-3.5 text-slate-500 flex-shrink-0 mt-0.5" />
-                          <span className="line-clamp-2">
-                            {order.delivery_address}
-                          </span>
-                        </p>
-                      </div>
-
-                      {/* Items List */}
-                      <div className="bg-slate-950 p-3 rounded-xl border border-slate-800/80 space-y-1.5 text-xs">
-                        <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">
-                          Ordered Items
-                        </p>
-                        {(order.items || []).map((item, idx) => (
-                          <div
-                            key={idx}
-                            className="flex justify-between text-slate-300"
-                          >
-                            <span className="truncate max-w-[180px]">
-                              {item.name || item.title}{" "}
-                              <strong className="text-emerald-400">
-                                x{item.quantity}
-                              </strong>
-                            </span>
-                            <span>
-                              ₹
-                              {(Number(item.price) || 0) * (item.quantity || 1)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Footer & Actions */}
-                    <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
-                      <div>
-                        <p className="text-[10px] text-slate-400">
-                          {order.payment_method}
-                        </p>
-                        <p className="text-sm font-bold text-emerald-400">
-                          ₹{order.total_amount}
-                        </p>
-                      </div>
-
-                      <div className="flex gap-2">
-                        <a
-                          href={`https://wa.me/91${order.customer_phone?.replace(/\D/g, "")}?text=Hello%20${order.customer_name},%20this%20is%20Getwell%20Medicos%20Sec%2035C.%20Regarding%20your%20Order%20%23${order.order_id}:`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-3 py-1.5 bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600/30 text-xs font-semibold rounded-lg transition"
-                        >
-                          WhatsApp
-                        </a>
-                        <button
-                          onClick={() => handlePrintSlip(order)}
-                          className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition cursor-pointer"
-                          title="Print Thermal Packing Slip"
-                        >
-                          <Printer className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ================= TAB 2: PRODUCT CREATOR ================= */}
+        {/* TAB 1: ADD PRODUCT */}
         {activeTab === "add_product" && (
-          <div className="max-w-2xl mx-auto bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 space-y-6">
+          <div className="max-w-2xl mx-auto bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl">
             <div>
               <h2 className="text-lg font-bold text-white flex items-center gap-2">
                 <PlusCircle className="w-5 h-5 text-emerald-400" />
-                Publish New Medicine / Skincare to Supabase
+                Publish Medicine / Product to Store Catalog
               </h2>
               <p className="text-xs text-slate-400 mt-1">
-                Directly uploads high-res photos to Supabase Storage and lists
-                the item on your storefront catalog.
+                Uploads high-res photos to Supabase Storage and creates the
+                product listing instantly.
               </p>
             </div>
 
@@ -633,7 +530,6 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
             )}
 
             <form onSubmit={handleCreateProduct} className="space-y-4 text-xs">
-              {/* Product Title */}
               <div className="space-y-1">
                 <label className="text-slate-300 font-semibold">
                   Product Title / Medicine Name *
@@ -641,7 +537,7 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Ahaglow Glogeous Advanced Face Wash Gel"
+                  placeholder="e.g. Ahaglow Glogeous Advanced Face Wash Gel (100g)"
                   value={newProduct.name}
                   onChange={(e) =>
                     setNewProduct({ ...newProduct, name: e.target.value })
@@ -650,7 +546,6 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
                 />
               </div>
 
-              {/* Brand & Category */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="text-slate-300 font-semibold">
@@ -693,7 +588,6 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
                 </div>
               </div>
 
-              {/* Selling Price, MRP, Pack Size */}
               <div className="grid grid-cols-3 gap-3">
                 <div className="space-y-1">
                   <label className="text-slate-300 font-semibold">
@@ -742,7 +636,6 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
                 </div>
               </div>
 
-              {/* Expiry Date */}
               <div className="space-y-1">
                 <label className="text-slate-300 font-semibold">
                   Batch Expiry Date
@@ -761,14 +654,13 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
                 />
               </div>
 
-              {/* Rich Description */}
               <div className="space-y-1">
                 <label className="text-slate-300 font-semibold">
-                  Product Description & Key Benefits
+                  Description & Key Clinical Benefits
                 </label>
                 <textarea
                   rows={4}
-                  placeholder="Enter key benefits, active ingredients, dosage or directions for use..."
+                  placeholder="Enter clinical benefits, directions for use, pharmacist notes..."
                   value={newProduct.description}
                   onChange={(e) =>
                     setNewProduct({
@@ -776,11 +668,10 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
                       description: e.target.value,
                     })
                   }
-                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-emerald-500"
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-emerald-500 resize-none"
                 />
               </div>
 
-              {/* Multi-Photo Upload Area */}
               <div className="space-y-2 pt-1">
                 <label className="text-slate-300 font-semibold flex items-center gap-1.5">
                   <ImageIcon className="w-4 h-4 text-emerald-400" />
@@ -794,23 +685,22 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
                     accept="image/*"
                     onChange={handleFileChange}
                     className="hidden"
-                    id="multi-image-input"
+                    id="multi-image-upload"
                   />
                   <label
-                    htmlFor="multi-image-input"
+                    htmlFor="multi-image-upload"
                     className="cursor-pointer flex flex-col items-center gap-1.5 py-2 text-slate-400 hover:text-emerald-400 transition"
                   >
                     <Upload className="w-6 h-6 text-slate-500" />
                     <span className="font-semibold text-xs text-white">
-                      Click to select 1 or more photos
+                      Click to choose photos from device
                     </span>
                     <span className="text-[10px] text-slate-500">
-                      Supports JPG, PNG, WEBP (Uploads to Supabase Storage)
+                      Supports JPG, PNG, WEBP (Direct upload to Supabase)
                     </span>
                   </label>
                 </div>
 
-                {/* Previews Grid */}
                 {filePreviews.length > 0 && (
                   <div className="grid grid-cols-4 gap-2 pt-2">
                     {filePreviews.map((previewUrl, index) => (
@@ -826,7 +716,7 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
                         <button
                           type="button"
                           onClick={() => handleRemovePhoto(index)}
-                          className="absolute top-1 right-1 p-1 bg-rose-600/90 text-white rounded-full opacity-90 hover:opacity-100 transition cursor-pointer"
+                          className="absolute top-1 right-1 p-1 bg-rose-600/90 text-white rounded-full transition cursor-pointer"
                           title="Remove photo"
                         >
                           <Trash2 className="w-3 h-3" />
@@ -835,25 +725,8 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
                     ))}
                   </div>
                 )}
-
-                {/* Fallback URL input */}
-                <div className="pt-1">
-                  <input
-                    type="url"
-                    placeholder="Or paste an image URL (optional)"
-                    value={newProduct.image_url_fallback}
-                    onChange={(e) =>
-                      setNewProduct({
-                        ...newProduct,
-                        image_url_fallback: e.target.value,
-                      })
-                    }
-                    className="w-full px-3.5 py-2 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-400 text-xs focus:outline-emerald-500"
-                  />
-                </div>
               </div>
 
-              {/* Submit Button */}
               <button
                 type="submit"
                 disabled={uploadingProduct}
@@ -867,11 +740,237 @@ export default function AdminOrdersPortal({ onClose, onProductAdded }) {
                 ) : (
                   <>
                     <Sparkles className="w-4 h-4" />
-                    <span>Publish Product to Live Website</span>
+                    <span>Publish Product to Store Catalog</span>
                   </>
                 )}
               </button>
             </form>
+          </div>
+        )}
+
+        {/* TAB 2: INVENTORY */}
+        {activeTab === "inventory" && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-white">
+                Published Products ({catalogProducts.length})
+              </h3>
+              <button
+                onClick={fetchCatalogProducts}
+                className="text-xs text-emerald-400 hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5" /> Refresh Catalog
+              </button>
+            </div>
+
+            {loadingCatalog ? (
+              <div className="text-center py-12 text-slate-500 text-xs">
+                Loading products...
+              </div>
+            ) : catalogProducts.length === 0 ? (
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center text-slate-400 text-sm">
+                No products found in Supabase yet.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {catalogProducts.map((p) => {
+                  const img =
+                    (p.image_urls && p.image_urls[0]) ||
+                    p.image_url ||
+                    "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=300";
+                  return (
+                    <div
+                      key={p.id}
+                      className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex gap-3 items-center justify-between shadow-md"
+                    >
+                      <div className="w-16 h-16 rounded-xl bg-slate-950 border border-slate-800 p-1 flex-shrink-0 flex items-center justify-center">
+                        <img
+                          src={img}
+                          alt={p.name || p.title}
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-xs font-bold text-white truncate">
+                          {p.name || p.title}
+                        </h4>
+                        <p className="text-[11px] text-slate-400 truncate">
+                          {p.brand || p.brand_name} • {p.category}
+                        </p>
+                        <p className="text-xs font-bold text-emerald-400 mt-1">
+                          ₹{p.price}{" "}
+                          <span className="text-[10px] text-slate-500 line-through">
+                            ₹{p.mrp}
+                          </span>
+                        </p>
+                      </div>
+                      <button
+                        onClick={() =>
+                          handleDeleteProduct(p.id, p.name || p.title)
+                        }
+                        className="p-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-xl transition cursor-pointer"
+                        title="Delete from Catalog"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 3: ORDERS */}
+        {activeTab === "orders" && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                {["All", "Received", "Packed", "Dispatched", "Delivered"].map(
+                  (status) => (
+                    <button
+                      key={status}
+                      onClick={() => setOrderFilter(status)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                        orderFilter === status
+                          ? "bg-emerald-600 text-white"
+                          : "bg-slate-800 text-slate-400 hover:bg-slate-700"
+                      }`}
+                    >
+                      {status}
+                    </button>
+                  ),
+                )}
+              </div>
+
+              <button
+                onClick={fetchOrders}
+                className="text-xs text-emerald-400 hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5" /> Refresh Orders
+              </button>
+            </div>
+
+            {loadingOrders ? (
+              <div className="text-center py-12 text-slate-500 text-xs">
+                Loading orders...
+              </div>
+            ) : filteredOrders.length === 0 ? (
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center text-slate-400 text-sm">
+                No orders found under "{orderFilter}".
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredOrders.map((order) => (
+                  <div
+                    key={order.id || order.order_id}
+                    className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-lg flex flex-col justify-between"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                        <div>
+                          <span className="text-xs font-mono text-emerald-400 font-bold">
+                            #{order.order_id}
+                          </span>
+                          <p className="text-[10px] text-slate-500">
+                            {new Date(order.created_at).toLocaleString(
+                              "en-IN",
+                              { timeZone: "Asia/Kolkata" },
+                            )}
+                          </p>
+                        </div>
+
+                        <select
+                          value={order.order_status || "Received"}
+                          onChange={(e) =>
+                            handleUpdateOrderStatus(
+                              order.order_id,
+                              e.target.value,
+                            )
+                          }
+                          className="text-xs font-semibold bg-slate-800 text-emerald-300 border border-slate-700 rounded-lg px-2.5 py-1 focus:outline-emerald-500 cursor-pointer"
+                        >
+                          <option value="Received">📥 Received</option>
+                          <option value="Packed">📦 Packed</option>
+                          <option value="Dispatched">🛵 Dispatched</option>
+                          <option value="Delivered">✅ Delivered</option>
+                        </select>
+                      </div>
+
+                      <div className="py-3 space-y-1.5 text-xs text-slate-300">
+                        <p className="font-bold text-white flex items-center justify-between">
+                          <span>{order.customer_name}</span>
+                          <a
+                            href={`tel:${order.customer_phone}`}
+                            className="text-emerald-400 hover:underline flex items-center gap-1 font-mono text-[11px]"
+                          >
+                            <Phone className="w-3 h-3" /> {order.customer_phone}
+                          </a>
+                        </p>
+                        <p className="text-slate-400 flex items-start gap-1">
+                          <MapPin className="w-3.5 h-3.5 text-slate-500 flex-shrink-0 mt-0.5" />
+                          <span className="line-clamp-2">
+                            {order.delivery_address}
+                          </span>
+                        </p>
+                      </div>
+
+                      <div className="bg-slate-950 p-3 rounded-xl border border-slate-800/80 space-y-1.5 text-xs">
+                        <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">
+                          Ordered Items
+                        </p>
+                        {(order.items || []).map((item, idx) => (
+                          <div
+                            key={idx}
+                            className="flex justify-between text-slate-300"
+                          >
+                            <span className="truncate max-w-[180px]">
+                              {item.name || item.title}{" "}
+                              <strong className="text-emerald-400">
+                                x{item.quantity}
+                              </strong>
+                            </span>
+                            <span>
+                              ₹
+                              {(Number(item.price) || 0) * (item.quantity || 1)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
+                      <div>
+                        <p className="text-[10px] text-slate-400">
+                          {order.payment_method}
+                        </p>
+                        <p className="text-sm font-bold text-emerald-400">
+                          ₹{order.total_amount}
+                        </p>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <a
+                          href={`https://wa.me/91${order.customer_phone?.replace(/\D/g, "")}?text=Hello%20${order.customer_name},%20this%20is%20Getwell%20Medicos%20Sec%2035C.%20Regarding%20your%20Order%20%23${order.order_id}:`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-1.5 bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600/30 text-xs font-semibold rounded-lg transition"
+                        >
+                          WhatsApp
+                        </a>
+                        <button
+                          onClick={() => handlePrintSlip(order)}
+                          className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition cursor-pointer"
+                          title="Print Thermal Packing Slip"
+                        >
+                          <Printer className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </main>

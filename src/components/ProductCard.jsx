@@ -1,66 +1,162 @@
-﻿import React from 'react';
+﻿// src/components/ProductCard.jsx
+import React from "react";
+import { Plus, Eye, Camera, ShieldCheck } from "lucide-react";
 
-export default function ProductCard({ product, onSelect, onAddToCart }) {
-  const primaryImage = (product.images && product.images.length > 0) 
-    ? product.images[0] 
-    : product.image;
+export default function ProductCard({ product, onAddToCart, onViewProduct }) {
+  if (!product) return null;
 
-  const discountPercent = product.originalPrice > product.price
-    ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
-    : 0;
+  // 1. Resolve Title / Name across all possible database columns
+  const displayName =
+    product.name ||
+    product.title ||
+    product.product_name ||
+    "Pharmacy Medicine";
+
+  // 2. Resolve Brand
+  const displayBrand =
+    product.brand ||
+    product.brand_name ||
+    product.manufacturer ||
+    "Pharma Grade";
+
+  // 3. Resolve Category
+  const displayCategory =
+    product.category ||
+    product.concern ||
+    product.skin_concern ||
+    "Clinical Skincare";
+
+  // 4. Resolve Pack Size / Unit
+  const displayUnit =
+    product.unit || product.size_volume || product.pack_size || "";
+
+  // 5. Pricing
+  const price = Number(product.price) || 0;
+  const mrp = Number(product.mrp || product.original_price) || price;
+  const discountPercent =
+    mrp > price ? Math.round(((mrp - price) / mrp) * 100) : 0;
+
+  // 6. Resolve Images (Handles Array, Single URL, or fallback)
+  let imageUrls = [];
+  if (Array.isArray(product.image_urls) && product.image_urls.length > 0) {
+    imageUrls = product.image_urls;
+  } else if (
+    typeof product.image_url === "string" &&
+    product.image_url.trim()
+  ) {
+    imageUrls = [product.image_url.trim()];
+  } else if (typeof product.image === "string" && product.image.trim()) {
+    imageUrls = [product.image.trim()];
+  } else if (Array.isArray(product.images) && product.images.length > 0) {
+    imageUrls = product.images;
+  } else {
+    imageUrls = [
+      "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=600&auto=format&fit=crop&q=80",
+    ];
+  }
+
+  const primaryImage = imageUrls[0];
+  const photoCount = imageUrls.length;
 
   return (
-    <div
-      onClick={() => onSelect(product)}
-      className="group bg-white rounded-2xl border border-[#e5e2d9] p-4 flex flex-col justify-between hover:shadow-lg hover:border-[#476556]/40 transition-all cursor-pointer relative"
-    >
-      <div>
-        <div className="w-full h-48 bg-[#fbfbfa] rounded-xl overflow-hidden flex items-center justify-center p-3 relative mb-3">
-          <img
-            src={primaryImage}
-            alt={product.name}
-            onError={(e) => {
-              e.currentTarget.src = "https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=600&q=80";
-            }}
-            className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300"
-          />
-          <span className="absolute top-2.5 left-2.5 bg-[#071610]/85 backdrop-blur-sm text-white text-[10px] font-semibold px-2 py-0.5 rounded">
-            {product.brand}
+    <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs hover:shadow-xl hover:border-emerald-300 transition-all duration-300 flex flex-col justify-between overflow-hidden group">
+      {/* Product Image Area */}
+      <div className="relative bg-slate-50 p-4 aspect-square flex items-center justify-center overflow-hidden border-b border-slate-100">
+        {/* Discount Tag */}
+        {discountPercent > 0 && (
+          <span className="absolute top-2.5 left-2.5 z-10 bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-xs">
+            {discountPercent}% OFF
           </span>
-          {discountPercent > 0 && (
-            <span className="absolute top-2.5 right-2.5 bg-emerald-700 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
-              {discountPercent}% OFF
-            </span>
-          )}
-          {product.images && product.images.length > 1 && (
-            <span className="absolute bottom-2.5 right-2.5 bg-black/70 text-white text-[10px] font-semibold px-2 py-0.5 rounded-md flex items-center gap-1 shadow-sm">
-              <svg className="w-3 h-3 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              <span>{product.images.length} Photos</span>
-            </span>
-          )}
-        </div>
+        )}
 
-        <p className="text-[11px] text-gray-400 uppercase font-medium">{product.category}</p>
-        <h3 className="text-sm font-bold text-gray-900 line-clamp-2 mt-0.5 leading-snug group-hover:text-[#2c5240] transition-colors">
-          {product.name}
-        </h3>
-        <p className="text-xs text-gray-500 line-clamp-2 mt-1.5 leading-relaxed">{product.description}</p>
+        {/* Multi-Photo Count Tag */}
+        {photoCount > 1 && (
+          <span className="absolute top-2.5 right-2.5 z-10 bg-slate-900/80 backdrop-blur-xs text-white text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-xs">
+            <Camera className="w-3 h-3 text-emerald-400" />
+            {photoCount} Photos
+          </span>
+        )}
+
+        {/* Product Image */}
+        <img
+          src={primaryImage}
+          alt={displayName}
+          className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
+          loading="lazy"
+          onError={(e) => {
+            e.target.src =
+              "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=600&auto=format&fit=crop&q=80";
+          }}
+        />
+
+        {/* Quick View / Magnifier Overlay Button */}
+        <button
+          type="button"
+          onClick={() => onViewProduct && onViewProduct(product)}
+          className="absolute inset-0 bg-slate-900/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer"
+        >
+          <span className="px-3.5 py-1.5 bg-white/95 text-slate-900 text-xs font-bold rounded-xl shadow-md flex items-center gap-1.5 hover:bg-white transition">
+            <Eye className="w-3.5 h-3.5 text-emerald-600" />
+            Inspect & Zoom
+          </span>
+        </button>
       </div>
 
-      <div className="pt-4 mt-3 border-t border-gray-100 flex items-center justify-between">
+      {/* Product Info */}
+      <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
         <div>
-          <span className="text-xs text-gray-400 line-through mr-1.5">&#8377;{product.originalPrice}</span>
-          <span className="text-base font-extrabold text-[#071610]">&#8377;{product.price}</span>
+          <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1">
+            <span className="uppercase tracking-wider font-bold text-emerald-700 truncate max-w-[120px]">
+              {displayCategory}
+            </span>
+            <span className="text-slate-400 font-medium truncate max-w-[100px]">
+              {displayBrand}
+            </span>
+          </div>
+
+          <h3
+            onClick={() => onViewProduct && onViewProduct(product)}
+            className="text-sm font-bold text-slate-900 line-clamp-2 hover:text-emerald-600 transition cursor-pointer leading-snug"
+            title={displayName}
+          >
+            {displayName}
+          </h3>
+
+          {displayUnit && (
+            <p className="text-[11px] text-slate-400 mt-1">
+              Pack:{" "}
+              <span className="font-semibold text-slate-600">
+                {displayUnit}
+              </span>
+            </p>
+          )}
         </div>
-        <button
-          onClick={(e) => onAddToCart(product, e, 1)}
-          className="bg-[#071610] hover:bg-[#2c5240] text-white text-xs font-semibold px-3.5 py-2 rounded-lg transition-colors shadow-sm flex items-center gap-1"
-        >
-          <span>+ Add</span>
-        </button>
+
+        {/* Price & Add to Bag CTA */}
+        <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+          <div>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-base font-bold text-emerald-700">
+                ₹{price}
+              </span>
+              {mrp > price && (
+                <span className="text-xs text-slate-400 line-through">
+                  ₹{mrp}
+                </span>
+              )}
+            </div>
+            <p className="text-[10px] text-slate-400">Inclusive of GST</p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => onAddToCart && onAddToCart(product)}
+            className="p-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-xs transition active:scale-95 cursor-pointer flex items-center justify-center"
+            title="Add to Bag"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+        </div>
       </div>
     </div>
   );

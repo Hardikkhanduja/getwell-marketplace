@@ -1,138 +1,142 @@
-﻿import React, { useState } from 'react';
+﻿// src/components/PrescriptionModal.jsx
+import React, { useState } from "react";
+import { X, ShieldCheck, ArrowRight } from "lucide-react";
 
 export default function PrescriptionModal({ isOpen, onClose }) {
+  const [patientName, setPatientName] = useState("");
+  const [patientLocation, setPatientLocation] = useState("");
+
   if (!isOpen) return null;
 
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [medicines, setMedicines] = useState('');
-  const [address, setAddress] = useState('');
+  const PHARMACIST_PHONE = "919872633001";
 
-  const handleSendToWhatsApp = (e) => {
-    e.preventDefault();
+  const handleOpenWhatsApp = (e) => {
+    e?.preventDefault();
 
-    if (!medicines.trim()) {
-      alert('Please mention the medicine or product name, or specify that you are attaching a prescription.');
-      return;
+    let message = `Hi Getwell Medicos (Sector 35C), I would like to order medicines.`;
+
+    if (patientName.trim()) {
+      message += `\n👤 Name: ${patientName.trim()}`;
+    }
+    if (patientLocation.trim()) {
+      message += `\n📍 Sector / Area: ${patientLocation.trim()}`;
     }
 
-    const message = `*PRESCRIPTION / CUSTOM MEDICINE INQUIRY*\n\n*Customer Name:* ${name || 'Not provided'}\n*Phone:* ${phone || 'Not provided'}\n*Delivery Location:* ${address || 'Chandigarh / Tricity'}\n\n*Required Medicines / Items:*\n${medicines}\n\n_(Attaching doctor prescription photo in chat if applicable)_\n\nPlease let me know availability and pricing from Sector 35C store.`;
+    message += `\n\n📸 I am attaching my prescription / medicine photo below:`;
 
-    const whatsappUrl = `https://wa.me/919872633001?text=${encodeURIComponent(message)}`;
-    window.open(whatsappUrl, '_blank');
+    const encodedMessage = encodeURIComponent(message);
+    const whatsappUrl = `https://wa.me/${PHARMACIST_PHONE}?text=${encodedMessage}`;
+
+    window.open(whatsappUrl, "_blank", "noopener,noreferrer");
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 relative shadow-2xl overflow-hidden border border-gray-100 max-h-[90vh] overflow-y-auto">
-        {/* Close Button */}
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 font-sans animate-fadeIn">
+      <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl border border-slate-200 overflow-hidden relative">
+        {/* Subtle Top Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-sm font-bold transition-colors"
-          aria-label="Close prescription modal"
+          className="absolute top-4 right-4 z-10 p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition cursor-pointer"
+          aria-label="Close"
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
-          </svg>
+          <X className="w-5 h-5" />
         </button>
 
-        {/* Modal Header */}
-        <div className="flex items-center gap-2 mb-1.5">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded">
-            Physical Pharmacy Counter (Sector 35C)
-          </span>
-        </div>
-        
-        <h2 className="text-xl font-bold text-gray-900">
-          Order Any Medicine or Upload Rx
-        </h2>
-        
-        <p className="text-xs text-gray-600 mt-1 leading-relaxed">
-          Need an allopathic medicine, syrup, or product not listed on the website? Send the name or attach your doctor's prescription directly to our licensed pharmacists.
-        </p>
-
-        {/* Inquiry Form */}
-        <form onSubmit={handleSendToWhatsApp} className="mt-5 space-y-3.5">
-          <div>
-            <label className="block text-xs font-bold text-gray-700 mb-1">
-              Medicine Names / Requirements *
-            </label>
-            <textarea
-              rows="3"
-              required
-              placeholder="e.g. 1. Pan-D (10 tabs)&#10;2. Shelcal 500 (15 tabs)&#10;3. Or write 'Attaching prescription photo'"
-              value={medicines}
-              onChange={(e) => setMedicines(e.target.value)}
-              className="w-full bg-[#faf9f5] border border-gray-300 rounded-xl p-3 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#071610]"
-            ></textarea>
+        {/* Clean Header */}
+        <div className="p-6 sm:p-7 pb-0 space-y-2">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-[11px] font-bold border border-emerald-100">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>Sector 35C Pharmacist Desk</span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <h3 className="text-xl font-bold text-slate-900 tracking-tight leading-snug">
+            Order Unlisted Medicines via WhatsApp
+          </h3>
+
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Need allopathic tablets, syrups, or unlisted medicines? Send a photo
+            of your doctor's prescription directly to our on-duty chemist.
+          </p>
+        </div>
+
+        {/* Content & Inputs */}
+        <div className="p-6 sm:p-7 space-y-5">
+          {/* Quick Optional Fields */}
+          <div className="space-y-3">
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                Your Name
+              <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                Your Name{" "}
+                <span className="text-slate-400 font-normal">(Optional)</span>
               </label>
               <input
                 type="text"
-                placeholder="e.g. Amit Sharma"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full bg-[#faf9f5] border border-gray-300 rounded-xl px-3 py-2 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#071610]"
+                placeholder="e.g. Gurpreet Singh"
+                value={patientName}
+                onChange={(e) => setPatientName(e.target.value)}
+                className="w-full px-3.5 py-2.5 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-200 focus:border-emerald-500 rounded-xl text-xs text-slate-900 focus:outline-none transition shadow-2xs"
               />
             </div>
+
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                Phone Number
+              <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                Sector / Delivery Area{" "}
+                <span className="text-slate-400 font-normal">(Optional)</span>
               </label>
               <input
-                type="tel"
-                placeholder="e.g. 9872633001"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="w-full bg-[#faf9f5] border border-gray-300 rounded-xl px-3 py-2 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#071610]"
+                type="text"
+                placeholder="e.g. Sector 35-C / Phase 7 Mohali"
+                value={patientLocation}
+                onChange={(e) => setPatientLocation(e.target.value)}
+                className="w-full px-3.5 py-2.5 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-200 focus:border-emerald-500 rounded-xl text-xs text-slate-900 focus:outline-none transition shadow-2xs"
               />
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-gray-700 mb-1">
-              Sector / Delivery Address in Tricity
-            </label>
-            <input
-              type="text"
-              placeholder="e.g. Sector 35-C, Chandigarh"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              className="w-full bg-[#faf9f5] border border-gray-300 rounded-xl px-3 py-2 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#071610]"
-            />
+          {/* 3 Simple Micro Steps */}
+          <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 space-y-2 text-[11px] text-slate-600">
+            <div className="flex items-center gap-2">
+              <span className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-[10px]">
+                1
+              </span>
+              <span>Click the button below to open WhatsApp chat</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-[10px]">
+                2
+              </span>
+              <span>Attach your prescription photo or type requirements</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-[10px]">
+                3
+              </span>
+              <span>
+                Our pharmacist quotes the bill & arranges express dispatch
+              </span>
+            </div>
           </div>
 
-          {/* How It Works Guarantee */}
-          <div className="bg-[#f2f7f4] border border-[#cbe3d5] rounded-xl p-3 text-[11px] text-gray-700 space-y-1">
-            <p className="font-bold text-[#1f4231] flex items-center gap-1.5">
-              <svg className="w-4 h-4 text-emerald-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span>How it works:</span>
-            </p>
-            <p>1. Clicking below opens WhatsApp with your pre-filled medicine request.</p>
-            <p>2. You can attach a photo of your doctor's prescription directly in the chat.</p>
-            <p>3. Our pharmacist confirms total bill & dispatches via swift bike delivery!</p>
-          </div>
-
+          {/* Primary Action Button with Your WhatsApp Logo */}
           <button
-            type="submit"
-            className="w-full bg-[#25D366] hover:bg-[#20bd5a] text-white py-3 rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 mt-2"
+            onClick={handleOpenWhatsApp}
+            className="w-full py-3.5 px-4 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-2xl text-xs sm:text-sm flex items-center justify-center gap-2.5 shadow-md hover:shadow-lg transition-all cursor-pointer active:scale-98"
           >
             <img
-              src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg"
+              src="/whatsapp.png"
               alt="WhatsApp"
-              className="w-4 h-4"
+              className="w-5 h-5 object-contain flex-shrink-0"
             />
-            <span>Send Prescription / Inquiry on WhatsApp</span>
+            <span>Chat on WhatsApp & Attach Rx</span>
+            <ArrowRight className="w-4 h-4 text-slate-400" />
           </button>
-        </form>
+
+          {/* Chemist Verification Tag */}
+          <p className="text-center text-[11px] text-slate-400 flex items-center justify-center gap-1.5 pt-1">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Licensed Chemist • Booth 13, Sec 35C Chandigarh</span>
+          </p>
+        </div>
       </div>
     </div>
   );
