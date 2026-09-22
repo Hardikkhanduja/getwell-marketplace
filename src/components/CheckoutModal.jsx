@@ -88,43 +88,41 @@ export default function CheckoutModal({
     }
   };
 
-  // Save to Supabase
+  // Save Order to Supabase (Matches exact Supabase columns)
   const saveOrderToDatabase = async (orderPayload) => {
     try {
       const fullAddress = `${orderPayload.address}, ${orderPayload.city} - ${orderPayload.pincode}`;
 
+      const cleanOrderRow = {
+        order_id: String(orderPayload.orderId),
+        customer_name: String(orderPayload.customerName),
+        customer_phone: String(orderPayload.customerPhone),
+        delivery_address: fullAddress,
+        pincode: String(orderPayload.pincode),
+        city: String(orderPayload.city),
+        total_amount: Number(orderPayload.totalAmount) || 0,
+        payment_method: String(orderPayload.paymentMethod),
+        payment_status: String(orderPayload.paymentStatus),
+        order_status: "Received",
+        items: Array.isArray(orderPayload.items) ? orderPayload.items : [],
+      };
+
+      console.log("Sending order to Supabase:", cleanOrderRow);
+
       const { data, error } = await supabase
         .from("orders")
-        .insert([
-          {
-            order_id: orderPayload.orderId,
-            customer_name: orderPayload.customerName,
-            name: orderPayload.customerName,
-            customer_phone: orderPayload.customerPhone,
-            phone: orderPayload.customerPhone,
-            delivery_address: fullAddress,
-            address: fullAddress,
-            pincode: orderPayload.pincode,
-            city: orderPayload.city,
-            total_amount: Number(orderPayload.totalAmount) || 0,
-            total: Number(orderPayload.totalAmount) || 0,
-            payment_method: orderPayload.paymentMethod,
-            payment_status: orderPayload.paymentStatus,
-            order_status: "Received",
-            status: "Received",
-            items: orderPayload.items || [],
-          },
-        ])
+        .insert([cleanOrderRow])
         .select();
 
       if (error) {
-        console.error("Supabase order insert error details:", error);
+        console.error("Supabase insert error details:", error);
+        alert("Supabase Order Save Error: " + error.message);
       } else {
-        console.log("Order successfully saved to Supabase:", data);
+        console.log("Order successfully inserted into Supabase:", data);
       }
       return data;
     } catch (err) {
-      console.error("Supabase connection error:", err);
+      console.error("Supabase connection exception:", err);
       return null;
     }
   };
