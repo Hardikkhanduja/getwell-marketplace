@@ -1,88 +1,100 @@
 // api/send-order-alert.js
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+  // Allow POST requests
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed. Use POST." });
   }
 
-  const { order } = req.body;
-
-  if (!order) {
-    return res.status(400).json({ error: 'Missing order details' });
+  const order = req.body;
+  if (!order || !order.orderId) {
+    return res.status(400).json({ error: "Missing order payload" });
   }
 
-  const API_URL = process.env.GREEN_API_URL;
-  const ID_INSTANCE = process.env.GREEN_API_ID_INSTANCE ;
-  const API_TOKEN = process.env.GREEN_API_TOKEN_INSTANCE;
-  const FATHER_PHONE =  '919872633001';
-  const YOUR_PHONE = '919988604013';
+  // 1. Read Environment Variables
+  const greenApiUrl = (
+    process.env.GREEN_API_URL || "https://7107.api.greenapi.com"
+  ).replace(/\/$/, "");
+  const idInstance = process.env.GREEN_API_ID_INSTANCE;
+  const tokenInstance = process.env.GREEN_API_TOKEN_INSTANCE;
+  const fatherPhone = process.env.FATHER_PHONE || "9872633001";
+  const yourPhone = process.env.YOUR_PHONE || "9988604013";
 
-  if (!API_TOKEN) {
-    console.warn('GREEN_API_TOKEN_INSTANCE is missing in environment variables.');
-    return res.status(200).json({ success: false, message: 'Token missing' });
+  if (!idInstance || !tokenInstance) {
+    console.error("Green-API credentials missing in environment variables.");
+    return res
+      .status(500)
+      .json({ error: "Green-API credentials not configured in Vercel" });
   }
 
-  const cleanCustomerPhone = order.phone.replace(/[^0-9]/g, '');
-  const customerChatLink = `https://wa.me/91${cleanCustomerPhone.slice(-10)}`;
+  // 2. Format phone number to Green-API ChatId (e.g. 919872633001@c.us)
+  const formatChatId = (phone) => {
+    if (!phone) return null;
+    let clean = phone.toString().replace(/\D/g, "");
+    if (clean.length === 10) clean = "91" + clean;
+    return `${clean}@c.us`;
+  };
 
-  const itemsList = order.items
-    .map((it, idx) => `  ${idx + 1}. *${it.name}* (Qty: ${it.quantity}) — ₹${it.price * it.quantity}`)
-    .join('\n');
+  const recipientChatIds = [
+    formatChatId(fatherPhone),
+    formatChatId(yourPhone),
+  ].filter(Boolean);
 
-  const messageBody = 
-`🔔 *NEW ORDER RECEIVED — GETWELL MEDICOS*
-━━━━━━━━━━━━━━━━━━━━━
-📦 *Order ID:* #${order.orderNumber}
-📅 *Date:* ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+  // 3. Construct WhatsApp Message
+  const itemsText = (order.items || [])
+    .map(
+      (item, idx) =>
+        `${idx + 1}. *${item.name || item.title}* (x${item.quantity || 1}) - ₹${(Number(item.price) || 0) * (item.quantity || 1)}`,
+    )
+    .join("\n");
+
+  const customerPhoneClean = (order.customerPhone || "").replace(/\D/g, "");
+
+  const whatsappMessage = `🚨 *NEW ORDER RECEIVED - GETWELL MEDICOS* 🚨
+━━━━━━━━━━━━━━━━━━━━
+📦 *Order ID:* #${order.orderId}
+💰 *Total Bill:* ₹${order.totalAmount}
+💳 *Payment:* ${order.paymentMethod} (${order.paymentStatus})
 
 👤 *CUSTOMER DETAILS:*
 • *Name:* ${order.customerName}
-• *Phone:* +91 ${cleanCustomerPhone.slice(-10)}
-👉 *Tap to Chat:* ${customerChatLink}
+• *Phone:* +91 ${order.customerPhone}
+• *Address:* ${order.address}, ${order.city} - ${order.pincode}
+• *Zone:* ${order.isLocal ? "⚡ Tricity 1-2 Hr Express" : "🚚 Pan-India Courier"}
 
-📍 *DELIVERY ADDRESS:*
-${order.address}
-${order.city} — ${order.pincode}
+📋 *ITEMS TO PACK:*
+${itemsText}
 
-💳 *PAYMENT & BILLING:*
-• *Payment Mode:* ${order.payMethod}
-${order.paymentId ? `• *Razorpay ID:* ${order.paymentId}\n` : ''}• *Delivery Fare:* ${order.deliveryFare}
-• *TOTAL PAYABLE:* *₹${order.total}*
-━━━━━━━━━━━━━━━━━━━━━
-📋 *ITEMS ORDERED:*
-${itemsList}
-━━━━━━━━━━━━━━━━━━━━━
-⚡ *ACTION:*
-1. Pack items from Sector 35C counter.
-2. Tap customer link above to coordinate delivery/bike dispatch!`;
+━━━━━━━━━━━━━━━━━━━━
+💬 *1-Tap Customer WhatsApp:*
+https://wa.me/91${customerPhoneClean}?text=Hello%20${encodeURIComponent(order.customerName)},%20this%20is%20Getwell%20Medicos%20Sec%2035C.%20Your%20Order%20%23${order.orderId}%20is%20being%20packed.`;
 
-  const greenApiEndpoint = `${API_URL}/waInstance${ID_INSTANCE}/sendMessage/${API_TOKEN}`;
-
-  // Recipients list
-  const recipientNumbers = [FATHER_PHONE, YOUR_PHONE].filter(Boolean);
+  // 4. Send message to both recipients in parallel via Green-API
+  const sendEndpoint = `${greenApiUrl}/waInstance${idInstance}/sendMessage/${tokenInstance}`;
 
   try {
-    const dispatchPromises = recipientNumbers.map((num) => {
-      const cleanNum = num.replace(/[^0-9]/g, '');
-      const chatId = `${cleanNum}@c.us`;
-
-      return fetch(greenApiEndpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+    const sendPromises = recipientChatIds.map(async (chatId) => {
+      const response = await fetch(sendEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           chatId: chatId,
-          message: messageBody,
+          message: whatsappMessage,
         }),
       });
+      return response.json();
     });
 
-    const responses = await Promise.all(dispatchPromises);
-    const data = await Promise.all(responses.map((r) => r.json()));
+    const results = await Promise.all(sendPromises);
+    console.log("Green-API dispatch results:", results);
 
-    console.log('Green-API order alert sent successfully:', data);
-    return res.status(200).json({ success: true, data });
-  } catch (err) {
-    console.error('Green-API alert dispatch error:', err);
-    return res.status(500).json({ error: 'Failed to send WhatsApp alert' });
+    return res.status(200).json({
+      success: true,
+      recipients: recipientChatIds.length,
+      results,
+    });
+  } catch (error) {
+    console.error("Failed to send Green-API message:", error);
+    return res.status(500).json({ error: error.message });
   }
 }
