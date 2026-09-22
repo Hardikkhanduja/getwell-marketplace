@@ -96,34 +96,43 @@ export default function CheckoutModal({
     }
   };
 
-  // Save Order to Supabase
+  // Save Order to Supabase with all column aliases
   const saveOrderToDatabase = async (orderPayload) => {
     try {
+      const fullAddress = `${orderPayload.address}, ${orderPayload.city} - ${orderPayload.pincode}`;
+
       const { data, error } = await supabase
         .from("orders")
         .insert([
           {
             order_id: orderPayload.orderId,
             customer_name: orderPayload.customerName,
+            name: orderPayload.customerName,
             customer_phone: orderPayload.customerPhone,
-            delivery_address: `${orderPayload.address}, ${orderPayload.city} - ${orderPayload.pincode}`,
+            phone: orderPayload.customerPhone,
+            delivery_address: fullAddress,
+            address: fullAddress,
             pincode: orderPayload.pincode,
             city: orderPayload.city,
-            total_amount: orderPayload.totalAmount,
+            total_amount: Number(orderPayload.totalAmount) || 0,
+            total: Number(orderPayload.totalAmount) || 0,
             payment_method: orderPayload.paymentMethod,
             payment_status: orderPayload.paymentStatus,
             order_status: "Received",
-            items: orderPayload.items,
+            status: "Received",
+            items: orderPayload.items || [],
           },
         ])
         .select();
 
       if (error) {
-        console.warn("Supabase order insert note:", error.message);
+        console.error("Supabase order insert error:", error);
+      } else {
+        console.log("Order successfully saved to Supabase:", data);
       }
       return data;
     } catch (err) {
-      console.warn("Supabase connection note:", err);
+      console.error("Supabase connection error:", err);
       return null;
     }
   };
