@@ -88,15 +88,17 @@ export default function CheckoutModal({
     }
   };
 
-  // Save Order to Supabase (Matches exact Supabase columns)
+  // Save Order to Supabase (Supports both order_number & order_id, customer_address & delivery_address)
   const saveOrderToDatabase = async (orderPayload) => {
     try {
       const fullAddress = `${orderPayload.address}, ${orderPayload.city} - ${orderPayload.pincode}`;
 
       const cleanOrderRow = {
+        order_number: String(orderPayload.orderId),
         order_id: String(orderPayload.orderId),
         customer_name: String(orderPayload.customerName),
         customer_phone: String(orderPayload.customerPhone),
+        customer_address: fullAddress,
         delivery_address: fullAddress,
         pincode: String(orderPayload.pincode),
         city: String(orderPayload.city),
@@ -104,10 +106,11 @@ export default function CheckoutModal({
         payment_method: String(orderPayload.paymentMethod),
         payment_status: String(orderPayload.paymentStatus),
         order_status: "Received",
+        status: "Received",
         items: Array.isArray(orderPayload.items) ? orderPayload.items : [],
       };
 
-      console.log("Sending order to Supabase:", cleanOrderRow);
+      console.log("Inserting order into Supabase:", cleanOrderRow);
 
       const { data, error } = await supabase
         .from("orders")
@@ -115,11 +118,10 @@ export default function CheckoutModal({
         .select();
 
       if (error) {
-        console.error("Supabase insert error details:", error);
+        console.error("Supabase insert error:", error);
       } else {
         console.log("Order successfully inserted into Supabase:", data);
       }
-
       return data;
     } catch (err) {
       console.error("Supabase connection exception:", err);
