@@ -15,22 +15,18 @@ import {
   Trash2,
   Plus,
   UploadCloud,
-  ExternalLink,
   Phone,
   MessageSquare,
   Copy,
   Check,
-  Eye,
   AlertTriangle,
   Layers,
   DollarSign,
-  Calendar,
   MapPin,
   User,
-  ChevronRight,
   ShieldCheck,
 } from "lucide-react";
-import { supabase } from "../supabaseClient";
+import { supabase } from "../lib/supabase";
 
 const DEFAULT_PINS = ["3500", "9872"];
 const STORE_NAME = "Getwell Store Operations Hub";
@@ -92,7 +88,7 @@ export default function AdminOrdersPortal() {
   const [productSuccessMsg, setProductSuccessMsg] = useState("");
   const [productErrorMsg, setProductErrorMsg] = useState("");
 
-  // 1. Check PIN Authentication
+  // 1. PIN Authentication
   const handlePinSubmit = (e) => {
     e?.preventDefault();
     const envPins = (import.meta.env.VITE_ADMIN_PIN || "")
@@ -116,8 +112,9 @@ export default function AdminOrdersPortal() {
     localStorage.removeItem("getwell_admin_auth");
   };
 
-  // 2. Fetch Orders (Resilient against schema mismatches)
+  // 2. Fetch Orders
   const fetchOrders = async () => {
+    if (!supabase) return;
     setLoadingOrders(true);
     try {
       const { data, error } = await supabase.from("orders").select("*");
@@ -125,7 +122,6 @@ export default function AdminOrdersPortal() {
       if (error) {
         console.warn("Orders fetch note:", error);
       } else if (Array.isArray(data)) {
-        // Sort newest first safely
         const sorted = [...data].sort((a, b) => {
           const dateA = new Date(a.created_at || a.created_on || 0).getTime();
           const dateB = new Date(b.created_at || b.created_on || 0).getTime();
@@ -142,6 +138,7 @@ export default function AdminOrdersPortal() {
 
   // 3. Fetch Products
   const fetchProducts = async () => {
+    if (!supabase) return;
     setLoadingProducts(true);
     try {
       const { data, error } = await supabase
@@ -171,6 +168,7 @@ export default function AdminOrdersPortal() {
 
   // 4. Update Order Status
   const handleUpdateOrderStatus = async (orderId, newStatus) => {
+    if (!supabase) return;
     setUpdatingOrderId(orderId);
     try {
       const { error } = await supabase
@@ -182,14 +180,12 @@ export default function AdminOrdersPortal() {
         .eq("id", orderId);
 
       if (error) {
-        // Fallback for schemas matching by order_number/order_id
         await supabase
           .from("orders")
           .update({ order_status: newStatus })
           .or(`order_number.eq.${orderId},order_id.eq.${orderId}`);
       }
 
-      // Update local state immediately
       setOrders((prev) =>
         prev.map((o) => {
           if (
@@ -204,7 +200,7 @@ export default function AdminOrdersPortal() {
       );
     } catch (err) {
       console.error("Failed to update order status:", err);
-      alert("Could not update order status. Please try again.");
+      alert("Could not update order status.");
     } finally {
       setUpdatingOrderId(null);
     }
@@ -212,8 +208,9 @@ export default function AdminOrdersPortal() {
 
   // 5. Delete Product from Catalog
   const handleDeleteProduct = async (productId, productName) => {
+    if (!supabase) return;
     const confirmDelete = window.confirm(
-      `Are you sure you want to permanently delete "${productName}" from the store catalog?`,
+      `Permanently delete "${productName}" from the store catalog?`,
     );
     if (!confirmDelete) return;
 
@@ -229,7 +226,7 @@ export default function AdminOrdersPortal() {
       setProducts((prev) => prev.filter((p) => p.id !== productId));
     } catch (err) {
       console.error("Delete product error:", err);
-      alert("Failed to delete product. Check Supabase RLS delete permissions.");
+      alert("Failed to delete product.");
     } finally {
       setDeletingProductId(null);
     }
@@ -253,6 +250,10 @@ export default function AdminOrdersPortal() {
   // 7. Publish Product to Supabase
   const handlePublishProduct = async (e) => {
     e.preventDefault();
+    if (!supabase) {
+      setProductErrorMsg("Supabase client is not configured.");
+      return;
+    }
     if (!formTitle.trim() || !formPrice) {
       setProductErrorMsg("Please fill in required fields (Title & Price).");
       return;
@@ -265,7 +266,6 @@ export default function AdminOrdersPortal() {
     try {
       const uploadedUrls = [];
 
-      // Upload selected photos to Supabase Storage bucket 'product-images'
       for (const file of selectedImages) {
         const fileExt = file.name.split(".").pop();
         const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
@@ -288,7 +288,6 @@ export default function AdminOrdersPortal() {
         }
       }
 
-      // Prepare resilient product row inserting both column names
       const sellingPriceNum = Number(formPrice) || 0;
       const mrpNum = Number(formMrp) || sellingPriceNum;
 
@@ -316,7 +315,7 @@ export default function AdminOrdersPortal() {
         prescription_required: formRxRequired,
       };
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("products")
         .insert([productPayload])
         .select();
@@ -340,7 +339,6 @@ export default function AdminOrdersPortal() {
       setFormInStock(true);
       setFormRxRequired(false);
 
-      // Refresh catalog list
       fetchProducts();
     } catch (err) {
       console.error("Publish product error:", err);
@@ -353,7 +351,7 @@ export default function AdminOrdersPortal() {
     }
   };
 
-  // 8. Copy Order Slip to Clipboard
+  // 8. Copy Order Slip
   const handleCopyOrderDetails = (order) => {
     const orderNum = order.order_number || order.order_id || order.id || "N/A";
     const customer = order.customer_name || order.name || "Customer";
@@ -383,7 +381,7 @@ export default function AdminOrdersPortal() {
     setTimeout(() => setCopiedOrderId(null), 2500);
   };
 
-  // 9. Metrics Calculation
+  // 9. Metrics
   const metrics = useMemo(() => {
     const totalSales = orders.reduce(
       (sum, o) => sum + (Number(o.total_amount || o.total) || 0),
@@ -454,7 +452,7 @@ export default function AdminOrdersPortal() {
   }, [products, productSearch, productCategoryFilter]);
 
   // ==========================================
-  // RENDER: PIN SECURITY SCREEN IF LOCKED
+  // RENDER: PIN SECURITY SCREEN
   // ==========================================
   if (!isAuthenticated) {
     return (
@@ -531,10 +529,9 @@ export default function AdminOrdersPortal() {
   // ==========================================
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased pb-20">
-      {/* Top Operations Header */}
+      {/* Top Header */}
       <header className="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          {/* Logo & Store Info */}
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-700 rounded-xl flex items-center justify-center text-white shadow-md shadow-emerald-950/40">
               <Layers className="w-5 h-5" />
@@ -550,7 +547,6 @@ export default function AdminOrdersPortal() {
             </div>
           </div>
 
-          {/* Quick Actions */}
           <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={handleLogout}
@@ -606,7 +602,7 @@ export default function AdminOrdersPortal() {
           </div>
         </div>
 
-        {/* Navigation Tabs */}
+        {/* Tabs */}
         <div className="flex items-center gap-2 border-b border-slate-800 pb-1 overflow-x-auto scrollbar-none">
           <button
             onClick={() => setActiveTab("add_product")}
@@ -645,9 +641,7 @@ export default function AdminOrdersPortal() {
           </button>
         </div>
 
-        {/* ========================================== */}
-        {/* TAB 1: ADD NEW MEDICINE / PRODUCT FORM     */}
-        {/* ========================================== */}
+        {/* TAB 1: ADD PRODUCT */}
         {activeTab === "add_product" && (
           <div className="max-w-3xl mx-auto bg-slate-900/70 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl">
             <div className="mb-6 pb-4 border-b border-slate-800">
@@ -676,7 +670,6 @@ export default function AdminOrdersPortal() {
             )}
 
             <form onSubmit={handlePublishProduct} className="space-y-5">
-              {/* Title */}
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                   Product Title / Medicine Name{" "}
@@ -692,7 +685,6 @@ export default function AdminOrdersPortal() {
                 />
               </div>
 
-              {/* Brand & Category */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1.5">
@@ -727,7 +719,6 @@ export default function AdminOrdersPortal() {
                 </div>
               </div>
 
-              {/* Price, MRP, Pack Size */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1.5">
@@ -773,7 +764,6 @@ export default function AdminOrdersPortal() {
                 </div>
               </div>
 
-              {/* Batch Expiry */}
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                   Batch Expiry Date
@@ -787,7 +777,6 @@ export default function AdminOrdersPortal() {
                 />
               </div>
 
-              {/* Description */}
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                   Description & Key Clinical Benefits
@@ -801,7 +790,6 @@ export default function AdminOrdersPortal() {
                 />
               </div>
 
-              {/* Multi-Photo Uploader */}
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-2">
                   Product Photos (Supabase Storage:{" "}
@@ -831,7 +819,6 @@ export default function AdminOrdersPortal() {
                   </label>
                 </div>
 
-                {/* Previews */}
                 {imagePreviews.length > 0 && (
                   <div className="grid grid-cols-4 sm:grid-cols-6 gap-3 mt-4">
                     {imagePreviews.map((src, i) => (
@@ -857,7 +844,6 @@ export default function AdminOrdersPortal() {
                 )}
               </div>
 
-              {/* Stock & Prescription Toggles */}
               <div className="flex flex-wrap items-center gap-6 pt-2">
                 <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-300">
                   <input
@@ -882,7 +868,6 @@ export default function AdminOrdersPortal() {
                 </label>
               </div>
 
-              {/* Submit CTA */}
               <div className="pt-4 border-t border-slate-800">
                 <button
                   type="submit"
@@ -906,12 +891,9 @@ export default function AdminOrdersPortal() {
           </div>
         )}
 
-        {/* ========================================== */}
-        {/* TAB 2: STORE CATALOG INVENTORY             */}
-        {/* ========================================== */}
+        {/* TAB 2: CATALOG INVENTORY */}
         {activeTab === "catalog" && (
           <div className="space-y-4">
-            {/* Catalog Controls */}
             <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-slate-900/60 p-4 rounded-2xl border border-slate-800">
               <div className="relative w-full sm:w-80">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -951,7 +933,6 @@ export default function AdminOrdersPortal() {
               </div>
             </div>
 
-            {/* Catalog Grid */}
             {filteredProducts.length === 0 ? (
               <div className="text-center py-16 bg-slate-900/40 rounded-3xl border border-slate-800/80">
                 <Package className="w-12 h-12 text-slate-600 mx-auto mb-3" />
@@ -1047,12 +1028,9 @@ export default function AdminOrdersPortal() {
           </div>
         )}
 
-        {/* ========================================== */}
-        {/* TAB 3: CUSTOMER ORDERS OPERATIONS          */}
-        {/* ========================================== */}
+        {/* TAB 3: CUSTOMER ORDERS */}
         {activeTab === "orders" && (
           <div className="space-y-4">
-            {/* Orders Filter Bar */}
             <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-slate-900/60 p-4 rounded-2xl border border-slate-800">
               <div className="relative w-full sm:w-80">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -1091,7 +1069,6 @@ export default function AdminOrdersPortal() {
               </div>
             </div>
 
-            {/* Orders Listing */}
             {filteredOrders.length === 0 ? (
               <div className="text-center py-16 bg-slate-900/40 rounded-3xl border border-slate-800/80">
                 <ShoppingBag className="w-12 h-12 text-slate-600 mx-auto mb-3" />
@@ -1137,7 +1114,6 @@ export default function AdminOrdersPortal() {
                       key={order.id || orderNum}
                       className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-md transition hover:border-slate-700"
                     >
-                      {/* Top Header Line */}
                       <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-800/80">
                         <div className="flex items-center gap-3">
                           <span className="text-sm font-mono text-emerald-400 font-bold bg-emerald-950/60 px-3 py-1 rounded-lg border border-emerald-500/30">
@@ -1149,7 +1125,6 @@ export default function AdminOrdersPortal() {
                           </span>
                         </div>
 
-                        {/* Status Badge */}
                         <div className="flex items-center gap-2">
                           <span
                             className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
@@ -1167,9 +1142,7 @@ export default function AdminOrdersPortal() {
                         </div>
                       </div>
 
-                      {/* Middle Details Grid */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-5 py-4 text-xs">
-                        {/* Customer Info */}
                         <div className="space-y-1.5">
                           <span className="text-slate-500 font-semibold uppercase tracking-wider text-[10px] block">
                             Customer Details
@@ -1202,7 +1175,6 @@ export default function AdminOrdersPortal() {
                           )}
                         </div>
 
-                        {/* Delivery Address */}
                         <div className="space-y-1.5">
                           <span className="text-slate-500 font-semibold uppercase tracking-wider text-[10px] block">
                             Delivery Address
@@ -1213,7 +1185,6 @@ export default function AdminOrdersPortal() {
                           </p>
                         </div>
 
-                        {/* Payment & Total */}
                         <div className="space-y-1.5 md:text-right">
                           <span className="text-slate-500 font-semibold uppercase tracking-wider text-[10px] block">
                             Payment & Total
@@ -1239,7 +1210,6 @@ export default function AdminOrdersPortal() {
                         </div>
                       </div>
 
-                      {/* Items Accordion / List */}
                       {items.length > 0 && (
                         <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 mb-4">
                           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
@@ -1275,7 +1245,6 @@ export default function AdminOrdersPortal() {
                         </div>
                       )}
 
-                      {/* Action Buttons */}
                       <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
                         <button
                           onClick={() => handleCopyOrderDetails(order)}
@@ -1296,7 +1265,6 @@ export default function AdminOrdersPortal() {
                           )}
                         </button>
 
-                        {/* Status Toggle Actions */}
                         <div className="flex items-center gap-2">
                           {status !== "Dispatched" &&
                             status !== "Delivered" && (
