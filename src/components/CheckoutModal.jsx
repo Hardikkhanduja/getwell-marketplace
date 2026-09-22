@@ -116,10 +116,10 @@ export default function CheckoutModal({
 
       if (error) {
         console.error("Supabase insert error details:", error);
-        alert("Supabase Order Save Error: " + error.message);
       } else {
         console.log("Order successfully inserted into Supabase:", data);
       }
+
       return data;
     } catch (err) {
       console.error("Supabase connection exception:", err);
