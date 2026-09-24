@@ -1,7 +1,7 @@
 ﻿// src/App.jsx
 import React, { useState, useEffect, useMemo } from "react";
 import { supabase } from "./lib/supabase";
-import { ArrowUpDown, X, Sparkles } from "lucide-react";
+import { ArrowUpDown, X, ShoppingBag } from "lucide-react";
 
 // Public Store Components
 import Header from "./components/Header";
@@ -46,8 +46,8 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [selectedBrand, setSelectedBrand] = useState("All");
-  const [priceRange, setPriceRange] = useState("All"); // 'All' | 'under300' | '300to600' | 'above600'
-  const [sortBy, setSortBy] = useState("featured"); // 'featured' | 'lowToHigh' | 'highToLow'
+  const [priceRange, setPriceRange] = useState("All");
+  const [sortBy, setSortBy] = useState("featured");
 
   // Cart State (Persisted in localStorage)
   const [cart, setCart] = useState(() => {
@@ -69,6 +69,11 @@ export default function App() {
     tab: "terms",
   });
 
+  // Total Cart Items Count
+  const totalCartCount = useMemo(() => {
+    return cart.reduce((acc, item) => acc + (Number(item?.quantity) || 1), 0);
+  }, [cart]);
+
   // Save Cart to LocalStorage
   useEffect(() => {
     try {
@@ -85,7 +90,7 @@ export default function App() {
       const { data, error } = await supabase
         .from("products")
         .select("*")
-        .order("created_at", { ascending: false });
+        .order("id", { ascending: false });
 
       if (!error && data) {
         setProducts(data);
@@ -103,20 +108,17 @@ export default function App() {
     }
   }, [isAdminRoute]);
 
-  // ================= DYNAMIC FILTERS CALCULATION =================
-  // Merge core departments with any custom categories from Supabase
+  // Dynamic Filters
   const categories = useMemo(() => {
     const dbCats = products.map((p) => p.category || p.concern).filter(Boolean);
     return [...new Set([...CORE_CATEGORIES, ...dbCats])];
   }, [products]);
 
-  // Extract all brands dynamically from uploaded products
   const brands = useMemo(() => {
     const b = products.map((p) => p.brand || p.brand_name).filter(Boolean);
     return ["All", ...new Set(b)];
   }, [products]);
 
-  // Check if any filter is active
   const isFiltered =
     selectedCategory !== "All" ||
     selectedBrand !== "All" ||
@@ -132,21 +134,17 @@ export default function App() {
     setSearchQuery("");
   };
 
-  // Filter & Sort Logic
   const filteredProducts = useMemo(() => {
     return products
       .filter((p) => {
-        // 1. Category Filter
         const productCat = p.category || p.concern || "";
         const matchesCat =
           selectedCategory === "All" || productCat === selectedCategory;
 
-        // 2. Brand Filter
         const productBrand = p.brand || p.brand_name || "";
         const matchesBrand =
           selectedBrand === "All" || productBrand === selectedBrand;
 
-        // 3. Search Query Filter
         const nameStr = p.name || p.title || "";
         const q = searchQuery.toLowerCase().trim();
         const matchesSearch =
@@ -155,8 +153,7 @@ export default function App() {
           productBrand.toLowerCase().includes(q) ||
           productCat.toLowerCase().includes(q);
 
-        // 4. Price Range Filter
-        const price = Number(p.price) || 0;
+        const price = Number(p.price || p.selling_price) || 0;
         let matchesPrice = true;
         if (priceRange === "under300") matchesPrice = price < 300;
         else if (priceRange === "300to600")
@@ -166,12 +163,11 @@ export default function App() {
         return matchesCat && matchesBrand && matchesSearch && matchesPrice;
       })
       .sort((a, b) => {
-        // 5. Price Sorting
-        const priceA = Number(a.price) || 0;
-        const priceB = Number(b.price) || 0;
+        const priceA = Number(a.price || a.selling_price) || 0;
+        const priceB = Number(b.price || b.selling_price) || 0;
         if (sortBy === "lowToHigh") return priceA - priceB;
         if (sortBy === "highToLow") return priceB - priceA;
-        return 0; // Default featured
+        return 0;
       });
   }, [
     products,
@@ -182,7 +178,6 @@ export default function App() {
     sortBy,
   ]);
 
-  // ================= ADMIN ROUTE =================
   if (isAdminRoute) {
     return (
       <AdminOrdersPortal
@@ -193,47 +188,79 @@ export default function App() {
     );
   }
 
-  // Cart Handlers
-  const handleAddToCart = (product) => {
+  // Bulletproof Add to Cart Handler
+  const handleAddToCart = (product, quantity = 1) => {
+    if (!product) return;
+    const qtyToAdd = Number(quantity) || 1;
+    const prodId = product.id;
+
+    // Normalized item for both CartDrawer and CheckoutModal
+    const formattedItem = {
+      ...product,
+      id: prodId,
+      name: product.name || product.title || "Medicine Item",
+      title: product.name || product.title || "Medicine Item",
+      price: Number(product.price || product.selling_price) || 0,
+      selling_price: Number(product.price || product.selling_price) || 0,
+      mrp: Number(product.mrp || product.price) || 0,
+      image_url:
+        Array.isArray(product.image_urls) && product.image_urls.length > 0
+          ? product.image_urls[0]
+          : product.image_url || product.image || "/placeholder-med.png",
+      image:
+        Array.isArray(product.image_urls) && product.image_urls.length > 0
+          ? product.image_urls[0]
+          : product.image_url || product.image || "/placeholder-med.png",
+      brand: product.brand || product.brand_name || "Pharma",
+      brand_name: product.brand || product.brand_name || "Pharma",
+      unit: product.unit || product.size_volume || "",
+      size_volume: product.unit || product.size_volume || "",
+    };
+
     setCart((prev) => {
-      const existing = prev.find((item) => item.id === product.id);
-      if (existing) {
-        return prev.map((item) =>
-          item.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
-            : item,
-        );
+      const existingIndex = prev.findIndex(
+        (item) => String(item.id) === String(prodId),
+      );
+      if (existingIndex > -1) {
+        const updated = [...prev];
+        updated[existingIndex] = {
+          ...updated[existingIndex],
+          quantity: (Number(updated[existingIndex].quantity) || 1) + qtyToAdd,
+        };
+        return updated;
       }
-      return [...prev, { ...product, quantity: 1 }];
+      return [...prev, { ...formattedItem, quantity: qtyToAdd }];
     });
     setIsCartOpen(true);
   };
 
   const handleUpdateQuantity = (productId, newQuantity) => {
     if (newQuantity <= 0) {
-      setCart((prev) => prev.filter((item) => item.id !== productId));
+      setCart((prev) =>
+        prev.filter((item) => String(item.id) !== String(productId)),
+      );
       return;
     }
     setCart((prev) =>
       prev.map((item) =>
-        item.id === productId ? { ...item, quantity: newQuantity } : item,
+        String(item.id) === String(productId)
+          ? { ...item, quantity: newQuantity }
+          : item,
       ),
     );
   };
 
   const handleRemoveItem = (productId) => {
-    setCart((prev) => prev.filter((item) => item.id !== productId));
+    setCart((prev) =>
+      prev.filter((item) => String(item.id) !== String(productId)),
+    );
   };
 
-  // ================= PUBLIC CUSTOMER VIEW =================
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
-      {/* Header */}
+      {/* 1. Header Bar with Floating Glass Pill */}
       <Header
-        cartCount={cart.reduce(
-          (acc, item) => acc + (Number(item?.quantity) || 1),
-          0,
-        )}
+        cartCount={totalCartCount}
         products={products}
         onOpenCart={() => setIsCartOpen(true)}
         onOpenPrescription={() => setIsPrescriptionOpen(true)}
@@ -243,265 +270,263 @@ export default function App() {
         setSearchQuery={setSearchQuery}
       />
 
-      {/* Main Content */}
-      <main className="flex-1">
-        {/* Sleek Hero Banner */}
-        <Hero onOpenPrescription={() => setIsPrescriptionOpen(true)} />
+      {/* 2. Main Storefront Area */}
+      <main className="flex-1 pt-16 sm:pt-20">
+        {/* Hero Showcase */}
+        <Hero
+          onOpenPrescription={() => setIsPrescriptionOpen(true)}
+          onExploreCatalog={() => {
+            const el = document.getElementById("catalog-section");
+            if (el) el.scrollIntoView({ behavior: "smooth" });
+          }}
+        />
 
         {/* Catalog & Filter Section */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
-          {/* Section Header & Segmented Category Track */}
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 mb-6">
+        <section
+          id="catalog-section"
+          className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10"
+        >
+          {/* Section Heading */}
+          <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 pb-4 border-b border-slate-200">
             <div>
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">
-                  Sector 35C Counter Stock
-                </span>
-              </div>
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight mt-0.5">
-                Verified Pharmacy Catalog
+              <span className="text-xs font-bold tracking-widest text-emerald-700 uppercase bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
+                Direct Pharmacy Counter
+              </span>
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-2 tracking-tight">
+                Authentic Medicines & Skincare
               </h2>
-              <p className="text-slate-500 text-xs mt-1">
-                Showing{" "}
-                <strong className="text-slate-800 font-semibold">
-                  {filteredProducts.length}
-                </strong>{" "}
-                {filteredProducts.length === 1 ? "item" : "items"} ready for
-                immediate dispatch
+              <p className="text-sm text-slate-500 mt-1">
+                Fresh batches sourced directly from licensed pharma distributors
               </p>
             </div>
 
-            {/* Apple-style Segmented Category Track */}
-            <div className="bg-slate-200/60 p-1.5 rounded-2xl flex items-center gap-1 overflow-x-auto max-w-full scrollbar-none border border-slate-200/80 shadow-inner">
-              {categories.map((cat) => {
-                const isActive = selectedCategory === cat;
-                return (
+            {/* Sort Dropdown */}
+            <div className="mt-4 md:mt-0 flex items-center gap-2">
+              <span className="text-xs font-semibold text-slate-500 flex items-center gap-1">
+                <ArrowUpDown className="w-3.5 h-3.5" /> Sort by:
+              </span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="text-xs font-bold bg-white border border-slate-200 rounded-xl px-3 py-2 text-slate-700 shadow-2xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+              >
+                <option value="featured">Featured / Newest</option>
+                <option value="lowToHigh">Price: Low to High</option>
+                <option value="highToLow">Price: High to Low</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Category Quick Tabs */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-4 mb-6 no-scrollbar">
+            {categories.map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-4 py-2 rounded-full text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                  selectedCategory === cat
+                    ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/20"
+                    : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+
+          {/* Active Filter Badges */}
+          {isFiltered && (
+            <div className="flex flex-wrap items-center gap-2 mb-6 p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs">
+              <span className="text-xs font-bold text-slate-400">
+                Active Filters:
+              </span>
+              {selectedCategory !== "All" && (
+                <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 text-xs px-2.5 py-1 rounded-full font-semibold">
+                  Category: {selectedCategory}
                   <button
-                    key={cat}
-                    onClick={() => setSelectedCategory(cat)}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all duration-200 cursor-pointer ${
-                      isActive
-                        ? "bg-emerald-600 text-white shadow-md shadow-emerald-900/20 scale-[1.02]"
-                        : "text-slate-600 hover:text-slate-900 hover:bg-white/60"
-                    }`}
+                    onClick={() => setSelectedCategory("All")}
+                    className="hover:text-emerald-950"
                   >
-                    {cat}
+                    <X className="w-3 h-3" />
                   </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Unified Filter Toolbar */}
-          <div className="bg-white rounded-2xl p-3 sm:p-4 border border-slate-200 shadow-xs mb-8">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              {/* Dropdowns Group */}
-              <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs w-full sm:w-auto">
-                {/* 1. Brand Filter */}
-                <div className="relative flex-1 sm:flex-initial">
-                  <div
-                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border transition-all ${
-                      selectedBrand !== "All"
-                        ? "bg-emerald-50/70 border-emerald-300 text-emerald-900 font-semibold"
-                        : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700"
-                    }`}
-                  >
-                    <span className="text-[11px] text-slate-400 font-medium">
-                      Brand:
-                    </span>
-                    <select
-                      value={selectedBrand}
-                      onChange={(e) => setSelectedBrand(e.target.value)}
-                      className="bg-transparent font-bold focus:outline-none cursor-pointer pr-2 truncate max-w-[130px] sm:max-w-[160px]"
-                    >
-                      <option value="All">
-                        All Brands ({brands.length - 1})
-                      </option>
-                      {brands
-                        .filter((b) => b !== "All")
-                        .map((brand) => (
-                          <option key={brand} value={brand}>
-                            {brand}
-                          </option>
-                        ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* 2. Price Range Filter */}
-                <div className="relative flex-1 sm:flex-initial">
-                  <div
-                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border transition-all ${
-                      priceRange !== "All"
-                        ? "bg-emerald-50/70 border-emerald-300 text-emerald-900 font-semibold"
-                        : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700"
-                    }`}
-                  >
-                    <span className="text-[11px] text-slate-400 font-medium">
-                      Price:
-                    </span>
-                    <select
-                      value={priceRange}
-                      onChange={(e) => setPriceRange(e.target.value)}
-                      className="bg-transparent font-bold focus:outline-none cursor-pointer pr-2"
-                    >
-                      <option value="All">All Budgets</option>
-                      <option value="under300">Under ₹300</option>
-                      <option value="300to600">₹300 – ₹600</option>
-                      <option value="above600">Above ₹600</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* 3. Sort By Dropdown */}
-                <div className="relative flex-1 sm:flex-initial">
-                  <div
-                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border transition-all ${
-                      sortBy !== "featured"
-                        ? "bg-emerald-50/70 border-emerald-300 text-emerald-900 font-semibold"
-                        : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700"
-                    }`}
-                  >
-                    <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-                    <span className="text-[11px] text-slate-400 font-medium">
-                      Sort:
-                    </span>
-                    <select
-                      value={sortBy}
-                      onChange={(e) => setSortBy(e.target.value)}
-                      className="bg-transparent font-bold focus:outline-none cursor-pointer pr-2"
-                    >
-                      <option value="featured">Featured Stock</option>
-                      <option value="lowToHigh">Price: Low to High</option>
-                      <option value="highToLow">Price: High to Low</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Reset Filters Pill */}
-              {isFiltered && (
-                <button
-                  onClick={handleResetFilters}
-                  className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100/80 text-rose-700 border border-rose-200/80 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
-                >
-                  <X className="w-3.5 h-3.5 text-rose-500" />
-                  <span>Clear Filters</span>
-                </button>
+                </span>
               )}
+              {selectedBrand !== "All" && (
+                <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 text-xs px-2.5 py-1 rounded-full font-semibold">
+                  Brand: {selectedBrand}
+                  <button
+                    onClick={() => setSelectedBrand("All")}
+                    className="hover:text-emerald-950"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              {searchQuery && (
+                <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 text-xs px-2.5 py-1 rounded-full font-semibold">
+                  Search: "{searchQuery}"
+                  <button
+                    onClick={() => setSearchQuery("")}
+                    className="hover:text-emerald-950"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              <button
+                onClick={handleResetFilters}
+                className="text-xs font-bold text-red-600 hover:text-red-700 underline ml-auto cursor-pointer"
+              >
+                Reset All
+              </button>
             </div>
-          </div>
+          )}
 
           {/* Product Grid */}
           {loading ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
               {[...Array(8)].map((_, i) => (
                 <div
                   key={i}
-                  className="bg-white rounded-2xl p-4 border border-slate-100 animate-pulse space-y-3"
+                  className="bg-white rounded-2xl p-4 border border-slate-200 animate-pulse space-y-3"
                 >
-                  <div className="h-44 bg-slate-200 rounded-xl"></div>
-                  <div className="h-4 bg-slate-200 rounded w-3/4"></div>
-                  <div className="h-4 bg-slate-200 rounded w-1/2"></div>
+                  <div className="w-full aspect-square bg-slate-100 rounded-xl"></div>
+                  <div className="h-4 bg-slate-100 rounded-md w-3/4"></div>
+                  <div className="h-3 bg-slate-100 rounded-md w-1/2"></div>
+                  <div className="h-8 bg-slate-100 rounded-xl w-full mt-4"></div>
                 </div>
               ))}
             </div>
           ) : filteredProducts.length === 0 ? (
-            <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 my-6 shadow-xs space-y-3">
-              <p className="text-lg font-bold text-slate-800">
-                No medicines match your filter selection
-              </p>
-              <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                Try clearing active filters or inquire directly on WhatsApp for
-                unlisted counter stock.
-              </p>
-              <div className="pt-2 flex justify-center gap-3">
-                <button
-                  onClick={handleResetFilters}
-                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition cursor-pointer"
-                >
-                  Clear All Filters
-                </button>
-                <button
-                  onClick={() => setIsPrescriptionOpen(true)}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-xs"
-                >
-                  Order via WhatsApp Rx
-                </button>
+            <div className="text-center py-16 bg-white rounded-3xl border border-slate-200 shadow-2xs max-w-lg mx-auto">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto text-xl font-bold">
+                💊
               </div>
+              <h3 className="text-base font-bold text-slate-800 mt-4">
+                No matching medicines found
+              </h3>
+              <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
+                We might have it on physical store counters at Sector 35C. Send
+                us a WhatsApp photo of your prescription.
+              </p>
+              <button
+                type="button"
+                onClick={() => setIsPrescriptionOpen(true)}
+                className="mt-4 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition cursor-pointer"
+              >
+                Upload Prescription on WhatsApp
+              </button>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
               {filteredProducts.map((product) => (
                 <ProductCard
                   key={product.id}
                   product={product}
-                  onAddToCart={handleAddToCart}
-                  onViewProduct={(p) => setSelectedProduct(p)}
+                  onAddToCart={() => handleAddToCart(product, 1)}
+                  onViewProduct={() => setSelectedProduct(product)}
                 />
               ))}
             </div>
           )}
-        </div>
+        </section>
 
-        {/* Reviews Carousel */}
+        {/* Google Reviews */}
         <ReviewsSection />
 
-        {/* Counter Location & Hours */}
+        {/* Verified Google Maps Store Location */}
         <StoreLocationSection />
       </main>
 
-      {/* Customer Footer */}
+      {/* 3. Official Store Footer */}
       <Footer onOpenPolicy={(tab) => setPolicyModal({ isOpen: true, tab })} />
 
-      {/* Slide-out Cart Drawer */}
+      {/* 4. Left Floating Button: WhatsApp Direct */}
+      <aside
+        aria-label="Chat on WhatsApp"
+        className="fixed bottom-6 left-6 z-50"
+      >
+        <a
+          href="https://wa.me/919872633001?text=Hi%20Getwell%20Medicos,%20I%20want%20to%20inquire%20about%20medicine%20availability%20or%20place%20an%20order."
+          target="_blank"
+          rel="noopener noreferrer"
+          className="w-14 h-14 rounded-full bg-[#25D366] hover:bg-[#20bd5a] text-white flex items-center justify-center shadow-xl shadow-emerald-950/25 transition-all duration-300 transform hover:scale-110 active:scale-95 cursor-pointer"
+          title="Chat with Getwell Medicos Pharmacist on WhatsApp"
+        >
+          <svg
+            className="w-7 h-7 fill-current"
+            viewBox="0 0 24 24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.885-9.885 9.885m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L0 24l6.335-1.662c1.746.952 3.71 1.453 5.711 1.454h.005c6.554 0 11.89-5.336 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+          </svg>
+        </a>
+      </aside>
+
+      {/* 5. Right Floating Button: Shopping Cart */}
+      <aside
+        aria-label="Open Shopping Bag"
+        className="fixed bottom-6 right-6 z-50"
+      >
+        <button
+          type="button"
+          onClick={() => setIsCartOpen(true)}
+          className="w-14 h-14 rounded-full bg-slate-900 hover:bg-slate-800 text-white flex items-center justify-center shadow-xl shadow-slate-950/25 transition-all duration-300 transform hover:scale-110 active:scale-95 cursor-pointer relative"
+          title="Open Shopping Bag"
+        >
+          <ShoppingBag className="w-6 h-6 text-white" />
+
+          {/* Floating Live Badge */}
+          {totalCartCount > 0 && (
+            <span className="absolute -top-1 -right-1 bg-emerald-500 text-white font-mono font-extrabold text-[11px] w-5 h-5 rounded-full flex items-center justify-center shadow-md border-2 border-white animate-in zoom-in-75 duration-150">
+              {totalCartCount}
+            </span>
+          )}
+        </button>
+      </aside>
+
+      {/* 6. Modals & Drawers with Full Dual Prop Compatibility */}
       <CartDrawer
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
+        cart={cart}
         cartItems={cart}
         onUpdateQuantity={handleUpdateQuantity}
         onRemoveItem={handleRemoveItem}
+        onCheckout={() => {
+          setIsCartOpen(false);
+          setIsCheckoutOpen(true);
+        }}
         onProceedToCheckout={() => {
           setIsCartOpen(false);
           setIsCheckoutOpen(true);
         }}
       />
 
-      {/* Checkout Modal */}
       <CheckoutModal
         isOpen={isCheckoutOpen}
         onClose={() => setIsCheckoutOpen(false)}
+        cart={cart}
         cartItems={cart}
-        onClearCart={() => {
-          setCart([]);
-          localStorage.removeItem("getwell_cart");
-        }}
+        onOrderPlaced={() => setCart([])}
       />
 
-      {/* Product Magnifier / Lightbox Modal */}
-      <ProductModal
-        product={selectedProduct}
-        onClose={() => setSelectedProduct(null)}
-        onAddToCart={handleAddToCart}
-        onBuyNow={(prod) => {
-          handleAddToCart(prod);
-          setIsCartOpen(false);
-          setIsCheckoutOpen(true);
-        }}
-      />
-
-      {/* Prescription Upload Modal */}
       <PrescriptionModal
         isOpen={isPrescriptionOpen}
         onClose={() => setIsPrescriptionOpen(false)}
       />
 
-      {/* Legal Policies Modal */}
+      <ProductModal
+        product={selectedProduct}
+        onClose={() => setSelectedProduct(null)}
+        onAddToCart={handleAddToCart}
+      />
+
       <PolicyModal
         isOpen={policyModal.isOpen}
-        onClose={() => setPolicyModal((prev) => ({ ...prev, isOpen: false }))}
-        initialTab={policyModal.tab}
+        defaultTab={policyModal.tab}
+        onClose={() => setPolicyModal({ isOpen: false, tab: "terms" })}
       />
     </div>
   );
